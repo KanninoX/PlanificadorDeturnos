@@ -79,80 +79,427 @@
       background: white !important;
       box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
     }
+
+    /* Drag & Drop feedback */
+    .dragging {
+      opacity: 0.5;
+      transform: scale(0.95);
+      cursor: grabbing !important;
+    }
+    .drag-over {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%) !important;
+      border: 2px dashed #6366f1 !important;
+      transform: scale(1.02);
+      transition: all 0.2s ease;
+    }
+    .draggable-item {
+      cursor: grab;
+      transition: all 0.2s ease;
+    }
+    .draggable-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(99, 102, 241, 0.3);
+      border-radius: 50%;
+      border-top-color: #6366f1;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Toast mejorado */
+    .toast {
+      position: fixed;
+      z-index: 9999;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      animation: slideUp 0.3s ease;
+    }
+    .toast-success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+    }
+    .toast-error {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+    }
+    .toast-info {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+    }
+    @keyframes slideUp {
+      from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+      to { transform: translateX(-50%) translateY(0); opacity: 1; }
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9998;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    .modal-content {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      animation: scaleIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes scaleIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Navigation buttons */
+    .nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Breadcrumb */
+    .breadcrumb {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    /* Mobile optimizations */
+    @media (max-width: 768px) {
+      .mobile-menu {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 80%;
+        max-width: 320px;
+        height: 100vh;
+        background: white;
+        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 9999;
+        overflow-y: auto;
+      }
+      .mobile-menu.open {
+        transform: translateX(0);
+      }
+      .nav-btn, .tab-btn {
+        min-height: 44px;
+        min-width: 44px;
+      }
+    }
+
+    /* Tooltip mejorado */
+    .tooltip {
+      position: relative;
+    }
+    .tooltip::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%) translateY(-8px);
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.95);
+      color: white;
+      font-size: 0.75rem;
+      border-radius: 8px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 1000;
+    }
+    .tooltip:hover::after {
+      opacity: 1;
+    }
+
+    /* Screen reader only */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+
+    /* Focus visible mejorado para accesibilidad */
+    *:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    /* Construcción manual de turnos */
+    .manual-shift-chip {
+      cursor: grab;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.875rem;
+      user-select: none;
+    }
+    .manual-shift-chip:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    .manual-shift-chip.dragging {
+      opacity: 0.5;
+      cursor: grabbing;
+    }
+
+    .manual-calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-top: 12px;
+    }
+
+    .manual-day-cell {
+      min-height: 80px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 6px;
+      background: white;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .manual-day-cell:hover {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .manual-day-cell.drag-over-manual {
+      border-color: #6366f1;
+      background: rgba(99, 102, 241, 0.05);
+      border-style: dashed;
+    }
+
+    .manual-day-cell.disabled {
+      background: #f1f5f9;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .manual-day-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .manual-day-number {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .manual-day-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 40px;
+    }
+
+    .manual-shift-assigned {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .manual-shift-assigned:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .manual-shift-assigned .remove-shift {
+      display: inline-block;
+      margin-left: 4px;
+      opacity: 0.7;
+      font-size: 0.7rem;
+    }
+
+    .manual-shift-assigned:hover .remove-shift {
+      opacity: 1;
+    }
+
+    .calendar-week-header {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 8px;
+      font-weight: 700;
+      font-size: 0.75rem;
+      color: #475569;
+      text-align: center;
+    }
+
+    .calendar-week-day {
+      padding: 8px;
+      background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body class="min-h-screen">
-  <header class="glass rounded-2xl mx-auto max-w-7xl mt-6 p-5">
+  <header class="glass rounded-2xl mx-auto max-w-7xl mt-6 p-5" role="banner">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="text-3xl md:text-4xl font-black tracking-tight">📅 Simulador de Turnos 🐟</h1>
-        <p class="text-slate-600 dark:text-slate-300">Planificación con vista horizontal de 3 meses continuos</p>
+        <p class="text-slate-600 dark:text-slate-300" role="doc-subtitle">Planificación con vista horizontal de 3 meses continuos</p>
       </div>
-      <div class="flex items-center gap-2 no-print">
-        <button id="btnUndo" class="px-3 py-2 glass rounded-xl hover:bg-white/60">↩️ Deshacer <span class="kbd">Ctrl/⌘+Z</span></button>
-        <button id="btnRedo" class="px-3 py-2 glass rounded-xl hover:bg-white/60">↪️ Rehacer <span class="kbd">Ctrl/⌘+Shift+Z</span></button>
-        <button id="btnDark" class="px-3 py-2 glass rounded-xl hover:bg-white/60">🌗 Tema</button>
+      <div class="flex items-center gap-2 no-print" role="toolbar" aria-label="Herramientas principales">
+        <button id="btnHelp" class="px-3 py-2 glass rounded-xl hover:bg-white/60 tooltip" data-tooltip="Ver atajos de teclado" aria-label="Ayuda y atajos de teclado">❓</button>
+        <button id="btnUndo" class="px-3 py-2 glass rounded-xl hover:bg-white/60 tooltip" data-tooltip="Deshacer (Ctrl/⌘+Z)" aria-label="Deshacer">↩️</button>
+        <button id="btnRedo" class="px-3 py-2 glass rounded-xl hover:bg-white/60 tooltip" data-tooltip="Rehacer (Ctrl/⌘+Shift+Z)" aria-label="Rehacer">↪️</button>
+        <button id="btnDark" class="px-3 py-2 glass rounded-xl hover:bg-white/60 tooltip" data-tooltip="Cambiar tema" aria-label="Cambiar tema oscuro/claro">🌗</button>
+        <button id="btnMobileMenu" class="px-3 py-2 glass rounded-xl hover:bg-white/60 md:hidden" aria-label="Menú">☰</button>
       </div>
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto mt-6 grid gap-6">
+  <main class="max-w-7xl mx-auto mt-6 grid gap-6" role="main">
     <!-- CONFIG -->
-    <section class="glass rounded-2xl p-6 config-area">
+    <section class="glass rounded-2xl p-6 config-area" aria-label="Configuración">
       <h2 class="text-xl font-extrabold mb-4">⚙️ Configuración rápida</h2>
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
-          <label class="block text-sm font-semibold mb-2">Fecha inicio</label>
-          <input type="date" id="startDate" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400" />
+          <label for="startDate" class="block text-sm font-semibold mb-2">Fecha inicio</label>
+          <input type="date" id="startDate" aria-label="Fecha de inicio de planificación" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400" />
         </div>
         <div>
-          <label class="block text-sm font-semibold mb-2">Fecha fin</label>
-          <input type="date" id="endDate" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400" />
+          <label for="endDate" class="block text-sm font-semibold mb-2">Fecha fin</label>
+          <input type="date" id="endDate" aria-label="Fecha de fin de planificación" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400" />
         </div>
         <div>
-          <label class="block text-sm font-semibold mb-2">Mes visible</label>
-          <select id="visibleMonth" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400"></select>
+          <label for="visibleMonth" class="block text-sm font-semibold mb-2">Navegación de meses</label>
+          <div class="flex gap-2 items-center">
+            <button id="btnPrevMonth" class="nav-btn glass px-3 py-2 rounded-xl hover:bg-white/60" aria-label="Mes anterior">◀</button>
+            <select id="visibleMonth" aria-label="Seleccionar mes visible" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400"></select>
+            <button id="btnNextMonth" class="nav-btn glass px-3 py-2 rounded-xl hover:bg-white/60" aria-label="Mes siguiente">▶</button>
+          </div>
+          <div id="breadcrumbRange" class="breadcrumb mt-2 text-center" role="status" aria-live="polite"></div>
         </div>
         <div class="flex gap-2 items-end">
-          <button id="btnExportXLSX" class="flex-1 bg-emerald-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-emerald-700">📥 Exportar Excel</button>
-          <button id="btnPrint" class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-white/60">🖨️ Imprimir</button>
+          <button id="btnExportXLSX" class="flex-1 bg-emerald-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-emerald-700" aria-label="Exportar planificación a Excel">📥 Exportar Excel</button>
+          <button id="btnPrint" class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-white/60" aria-label="Imprimir planificación">🖨️ Imprimir</button>
         </div>
       </div>
-      <div class="mt-4 flex flex-wrap gap-2 no-print">
-        <button id="btnSave" class="px-3 py-2 glass rounded-xl">💾 Guardar</button>
-        <button id="btnLoad" class="px-3 py-2 glass rounded-xl">📂 Cargar</button>
-        <button id="btnReset" class="px-3 py-2 glass rounded-xl text-rose-700">🧹 Reset</button>
+      <div class="mt-4 flex flex-wrap gap-2 no-print items-center">
+        <button id="btnSave" class="px-3 py-2 glass rounded-xl" aria-label="Guardar configuración">💾 Guardar</button>
+        <button id="btnLoad" class="px-3 py-2 glass rounded-xl" aria-label="Cargar configuración guardada">📂 Cargar</button>
+        <button id="btnReset" class="px-3 py-2 glass rounded-xl text-rose-700" aria-label="Resetear a configuración inicial">🧹 Reset</button>
+
+        <div class="ml-auto flex items-center gap-3 bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2 rounded-xl border-2 border-indigo-200">
+          <span class="text-sm font-semibold text-slate-700">Modo:</span>
+          <button id="btnToggleMode" class="px-4 py-2 rounded-lg font-bold transition-all" aria-label="Alternar entre modo automático y manual">
+            <span id="modeLabel">🤖 Automático</span>
+          </button>
+        </div>
       </div>
     </section>
 
     <!-- GROUPS PALETTE -->
-    <section class="glass rounded-2xl p-6 groups-palette">
+    <section class="glass rounded-2xl p-6 groups-palette" aria-label="Paleta de grupos">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-extrabold">👥 Grupos disponibles</h2>
-        <div class="text-slate-500 text-sm">Arrastra una ficha de ciclo a un turno</div>
+        <div class="text-slate-500 text-sm flex items-center gap-2">
+          <span class="hidden md:inline">👆 Arrastra una ficha de ciclo a un turno</span>
+          <button id="btnTutorial" class="text-indigo-600 hover:text-indigo-800 font-semibold" aria-label="Ver tutorial de uso">Ver tutorial</button>
+        </div>
       </div>
-      <div id="groupsPalette" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3"></div>
+      <div id="groupsPalette" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3" role="list"></div>
     </section>
 
     <!-- DROP ZONES -->
-    <section class="grid md:grid-cols-3 gap-6 zones-area">
-      <div class="glass rounded-2xl p-5" id="zone-day" data-drop-zone="day"></div>
-      <div class="glass rounded-2xl p-5" id="zone-afternoon" data-drop-zone="afternoon"></div>
-      <div class="glass rounded-2xl p-5" id="zone-night" data-drop-zone="night"></div>
+    <section class="grid md:grid-cols-3 gap-6 zones-area" aria-label="Zonas de turnos">
+      <div class="glass rounded-2xl p-5" id="zone-day" data-drop-zone="day" role="region" aria-label="Turno día"></div>
+      <div class="glass rounded-2xl p-5" id="zone-afternoon" data-drop-zone="afternoon" role="region" aria-label="Turno tarde"></div>
+      <div class="glass rounded-2xl p-5" id="zone-night" data-drop-zone="night" role="region" aria-label="Turno noche"></div>
     </section>
 
     <!-- TABS -->
     <section class="grid gap-4 tabs-area">
-      <div class="flex flex-wrap gap-2 no-print">
-        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="by-group">👥 Vista por grupos</button>
-        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="by-shift">📊 Vista por turnos</button>
-        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="stats">📈 Métricas & domingos</button>
-        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="rules">✅ Validador de reglas</button>
+      <div class="flex flex-wrap gap-2 no-print" role="tablist" aria-label="Vistas del calendario">
+        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="by-group" role="tab" aria-controls="tabContent">👥 Vista por grupos</button>
+        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="by-shift" role="tab" aria-controls="tabContent">📊 Vista por turnos</button>
+        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="manual" role="tab" aria-controls="tabContent">✏️ Construcción manual</button>
+        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="stats" role="tab" aria-controls="tabContent">📈 Métricas & domingos</button>
+        <button class="tab-btn px-3 py-2 glass rounded-xl font-semibold" data-tab="rules" role="tab" aria-controls="tabContent">✅ Validador de reglas</button>
       </div>
-      <div id="tabContent" class="glass rounded-2xl p-4 overflow-x-auto"></div>
+      <div id="tabContent" class="glass rounded-2xl p-4 overflow-x-auto" role="tabpanel"></div>
       <div class="print:show text-xs text-slate-500">Generado por Simulador de Turnos PRO v2</div>
     </section>
   </main>
+
+  <!-- Modal de ayuda -->
+  <div id="helpModal" class="hidden"></div>
+
+  <!-- Modal de tutorial -->
+  <div id="tutorialModal" class="hidden"></div>
+
+  <!-- Modal de vista previa -->
+  <div id="previewModal" class="hidden"></div>
 
   <!-- Área para imprimir -->
   <div id="printArea" class="hidden">
@@ -188,7 +535,15 @@
         afternoon: [{ groupId: '2', cycle1: '6x1', cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 }],
         night:     [{ groupId: '3', cycle1: '5x2', cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 }],
       },
-      rules: { minFreeSundaysPerMonth: 2, maxConsecutiveWorkDays: 6 }
+      rules: { minFreeSundaysPerMonth: 2, maxConsecutiveWorkDays: 6 },
+      manualMode: false, // true = modo manual, false = modo automático
+      manualAssignments: {
+        day:       [],
+        afternoon: [],
+        night:     []
+      },
+      manualDays: {}, // { 'YYYY-MM-DD': 'day' | 'afternoon' | 'night' | 'rest' }
+      manualCalendar: {} // DEPRECATED: mantener para compatibilidad con versiones antiguas
     };
 
     let state = JSON.parse(JSON.stringify(defaultState));
@@ -232,6 +587,88 @@
       return {calendar, byGroup};
     }
 
+    function buildManualCalendar(){
+      const start=new Date(state.startDate), end=new Date(state.endDate);
+      const calendar={ day:[], afternoon:[], night:[] };
+
+      // Generar calendario día por día usando manualDays
+      for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
+        const dateStr = t.toISOString().slice(0,10);
+        const isSunday = t.getDay()===0;
+        const assignedShift = state.manualDays[dateStr] || 'rest';
+
+        const row = {
+          day:{date:dateStr,isSunday,groups:[]},
+          afternoon:{date:dateStr,isSunday,groups:[]},
+          night:{date:dateStr,isSunday,groups:[]}
+        };
+
+        // Si el día tiene un turno asignado, agregar un grupo genérico
+        if(assignedShift !== 'rest'){
+          row[assignedShift].groups.push({
+            groupId:'MANUAL',
+            isWorking:true,
+            currentCycleType:1
+          });
+        }
+
+        calendar.day.push(row.day);
+        calendar.afternoon.push(row.afternoon);
+        calendar.night.push(row.night);
+      }
+
+      // Para byGroup, crear un solo grupo "MANUAL" que muestra todos los días asignados
+      const byGroup = { 'MANUAL': [] };
+      for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
+        const dateStr = t.toISOString().slice(0,10);
+        const isSunday = t.getDay()===0;
+        const assignedShift = state.manualDays[dateStr] || 'rest';
+
+        byGroup['MANUAL'].push({
+          date:dateStr,
+          isSunday,
+          isWorking: assignedShift !== 'rest',
+          shift: assignedShift,
+          currentCycleType:1
+        });
+      }
+
+      return {calendar, byGroup};
+    }
+
+    // Función para aplicar un ciclo desde una fecha inicial
+    function applyCycleToManual(startDate, shift, cycleType) {
+      if (!state.manualDays) {
+        state.manualDays = {};
+      }
+
+      const [workDays, restDays] = cycleTuple(cycleType);
+      const totalDays = workDays + restDays;
+
+      // Aplicar el ciclo por 90 días (aproximadamente 3 meses)
+      let currentDate = new Date(startDate);
+      const endDate = new Date(currentDate);
+      endDate.setDate(endDate.getDate() + 90);
+
+      let dayInCycle = 0;
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().slice(0, 10);
+
+        if (dayInCycle < workDays) {
+          state.manualDays[dateStr] = shift;
+        } else {
+          state.manualDays[dateStr] = 'rest';
+        }
+
+        dayInCycle++;
+        if (dayInCycle >= totalDays) {
+          dayInCycle = 0;
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
     const monthsAvailable = (calendar)=>{ const set=new Set(); calendar.day.forEach(d=>set.add(d.date.slice(0,7))); return Array.from(set).sort(); };
     function monthByGroup(byGroup, yyyyMM){ const days=daysInMonth(yyyyMM); const out={}; Object.keys(byGroup).forEach(g=>{ const map=new Map(byGroup[g].map(d=>[d.date,d])); out[g]=days.map(x=> map.get(x.date) || {date:x.date,isSunday:x.isSunday,shift:'rest',isWorking:false,currentCycleType:1}); }); return out; }
     function monthByShift(calendar, yyyyMM){ const start=`${yyyyMM}-01`; const endDt=daysInMonth(yyyyMM).slice(-1)[0].date; const sliced={day:[],afternoon:[],night:[]}; ['day','afternoon','night'].forEach(k=>{ sliced[k]=calendar[k].filter(d=> d.date>=start && d.date<=endDt); }); return sliced; }
@@ -241,7 +678,8 @@
 
     // ---------- RENDER ----------
     function renderAll(){
-      const {calendar, byGroup} = buildEngine();
+      // Usar calendario manual o automático según el modo
+      const {calendar, byGroup} = state.manualMode ? buildManualCalendar() : buildEngine();
       if(!state.selectedMonth){ state.selectedMonth = state.startDate.slice(0,7); }
       const select = document.getElementById('visibleMonth');
       const opts = monthsAvailable(calendar);
@@ -252,7 +690,7 @@
       pal.innerHTML = state.groups.map(g=>{
         return `<div class="space-y-2">
           <div class="${groupColors[g]} rounded-xl p-2 text-center font-bold">G${g}</div>
-          ${['4x3','5x2','6x1'].map(c=>`<div draggable="true" data-group="${g}" data-cycle="${c}" class="border-2 ${groupBorders[g]} bg-white rounded-xl p-2 cursor-move hover:shadow-lg text-center font-semibold text-xs">⋮⋮ ${c}</div>`).join('')}
+          ${['4x3','5x2','6x1'].map(c=>`<div draggable="true" data-group="${g}" data-cycle="${c}" class="draggable-item border-2 ${groupBorders[g]} bg-white rounded-xl p-2 text-center font-semibold text-xs" title="Arrastra al turno deseado">⋮⋮ ${c}</div>`).join('')}
         </div>`;
       }).join('');
 
@@ -260,7 +698,9 @@
       packs.forEach(p=>{
         const host=document.getElementById(p.id); const tpl=document.getElementById('tpl-zone').content.cloneNode(true);
         tpl.querySelector('h3').className=`text-2xl font-extrabold mb-2 text-center ${p.color}`; tpl.querySelector('h3').textContent=p.title;
-        tpl.querySelector('.js-cap').textContent=state.maxGroupsPerShift; const cards=tpl.querySelector('.js-cards'); const list=state.shiftAssignments[p.key];
+        tpl.querySelector('.js-cap').textContent=state.maxGroupsPerShift; const cards=tpl.querySelector('.js-cards');
+        // Usar asignaciones manuales o automáticas según el modo
+        const list=state.manualMode ? state.manualAssignments[p.key] : state.shiftAssignments[p.key];
         tpl.querySelector('.js-count').textContent=list.length; tpl.querySelector('.js-empty').classList.toggle('hidden', list.length>0);
         cards.innerHTML=list.map((a,idx)=>{
           return `<div class="border-2 ${groupBorders[a.groupId]} bg-white rounded-xl p-3">
@@ -340,6 +780,11 @@
       if (tab === 'rules') {
         const s = sundayStats(calendar, 6);
         wrap.innerHTML = renderRules(s);
+      }
+
+      if (tab === 'manual') {
+        wrap.innerHTML = renderManualCalendar();
+        wireManualDnD();
       }
     }
 
@@ -512,15 +957,245 @@
 
     const emptyMsg = (t)=> `<div class="bg-amber-50 border-l-4 border-amber-400 p-4 text-center">⚠️ ${t}</div>`;
 
+    // ---------- MANUAL CALENDAR ----------
+    function renderManualCalendar() {
+      // Asegurar que manualDays exista
+      if (!state.manualDays) {
+        state.manualDays = {};
+      }
+
+      const baseMonth = new Date(state.selectedMonth + '-01');
+      const months = [];
+      for (let i = 0; i < 3; i++) {
+        const m = new Date(baseMonth);
+        m.setMonth(baseMonth.getMonth() + i);
+        months.push(m.toISOString().slice(0, 7));
+      }
+
+      // Combinar todos los días de los 3 meses
+      const allDays = [];
+      months.forEach(month => {
+        const days = daysInMonth(month);
+        allDays.push(...days);
+      });
+
+      const cycles = ['6x1', '5x2', '4x3'];
+      const shifts = [
+        { id: 'day', label: 'DÍA', emoji: '☀️', color: 'bg-amber-100', borderColor: 'border-amber-500' },
+        { id: 'afternoon', label: 'TARDE', emoji: '🌤️', color: 'bg-orange-100', borderColor: 'border-orange-500' },
+        { id: 'night', label: 'NOCHE', emoji: '🌙', color: 'bg-indigo-100', borderColor: 'border-indigo-500' }
+      ];
+
+      return `
+        <div class="space-y-6">
+          <!-- Paletas de ciclos por turno -->
+          <div class="grid md:grid-cols-3 gap-4">
+            ${shifts.map(shift => `
+              <div class="glass rounded-xl p-4 ${shift.borderColor} border-2">
+                <h3 class="text-lg font-bold mb-3 text-center ${shift.color} rounded-lg py-2">
+                  ${shift.emoji} ${shift.label}
+                </h3>
+                <div class="space-y-2">
+                  ${cycles.map(cycle => `
+                    <div
+                      draggable="true"
+                      data-cycle-shift="${shift.id}"
+                      data-cycle-type="${cycle}"
+                      class="cursor-grab p-3 bg-white rounded-lg border-2 ${shift.borderColor} hover:shadow-lg transition-all text-center font-bold"
+                      title="Arrastra para aplicar ${cycle} de ${shift.label}"
+                    >
+                      ${cycle}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Instrucciones -->
+          <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200">
+            <strong>💡 Cómo usar:</strong>
+            <ul class="list-disc list-inside mt-2 text-sm space-y-1">
+              <li>Arrastra un ciclo (6x1, 5x2, 4x3) desde un turno</li>
+              <li>Suéltalo en una fecha del calendario</li>
+              <li>El patrón se aplicará automáticamente desde esa fecha</li>
+              <li>Haz clic en un día para eliminarlo</li>
+            </ul>
+          </div>
+
+          <!-- Calendario de 3 meses -->
+          <div class="scroll-hint">
+            <span>➡️ Desliza horizontalmente para ver los ${allDays.length} días de ${months.length} meses</span>
+          </div>
+          <div class="calendar-container">
+            <table class="border-collapse text-xs" style="width: auto; min-width: max-content;">
+              <thead>
+                <tr class="bg-slate-100">
+                  ${allDays.map(d => {
+                    const isFirst = d.js.getDate() === 1;
+                    const mon = d.js.toLocaleDateString('es-CL', {month: 'short'}).toUpperCase();
+                    return `<th class="border p-1 ${d.isSunday ? 'bg-blue-100' : ''} ${isFirst ? 'border-l-4 border-l-rose-500' : ''}" data-drop-manual-day="${d.date}">
+                      ${isFirst ? `<div class="text-rose-600 font-bold text-[10px]">${mon}</div>` : ''}
+                      <div class="font-bold">${d.js.getDate()}</div>
+                      <div class="text-[10px]">${d.js.toLocaleDateString('es-CL', {weekday: 'short'})}</div>
+                    </th>`;
+                  }).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  ${allDays.map(d => {
+                    const assignedShift = state.manualDays[d.date] || 'rest';
+                    const cls = assignedShift === 'day' ? 'shift-day' : assignedShift === 'afternoon' ? 'shift-afternoon' : assignedShift === 'night' ? 'shift-night' : 'shift-rest';
+                    const label = assignedShift === 'day' ? 'Día' : assignedShift === 'afternoon' ? 'Tarde' : assignedShift === 'night' ? 'Noche' : '-';
+                    return `<td class="border p-1 text-center ${cls} cursor-pointer" title="${label}" data-drop-manual-day="${d.date}" data-manual-day-cell="${d.date}">
+                      <div class="font-semibold text-[11px] py-1">${label}</div>
+                    </td>`;
+                  }).join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Botones de control -->
+          <div class="flex gap-2">
+            <button id="btnClearManualDays" class="px-4 py-2 bg-rose-100 text-rose-700 rounded-xl hover:bg-rose-200 font-semibold">
+              🗑️ Limpiar todos los días
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // ---------- MODALS & HELPERS ----------
+    function showModal(title, content, onClose) {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-2xl font-bold">${title}</h3>
+            <button class="text-2xl hover:text-red-600" onclick="this.closest('.modal-overlay').remove(); ${onClose ? onClose : ''}">&times;</button>
+          </div>
+          <div>${content}</div>
+        </div>
+      `;
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+          if(onClose) eval(onClose);
+        }
+      });
+      document.body.appendChild(modal);
+      return modal;
+    }
+
+    function updateBreadcrumb() {
+      const breadcrumb = document.getElementById('breadcrumbRange');
+      if (!breadcrumb) return;
+
+      const base = new Date(state.selectedMonth + '-01');
+      const months = [];
+      for (let i = 0; i < 3; i++) {
+        const m = new Date(base);
+        m.setMonth(base.getMonth() + i);
+        months.push(m.toLocaleDateString('es-CL', {month: 'short', year: 'numeric'}));
+      }
+      breadcrumb.textContent = `📅 ${months.join(' → ')}`;
+    }
+
+    function showHelpModal() {
+      const content = `
+        <div class="space-y-4">
+          <div class="p-4 bg-indigo-50 rounded-xl">
+            <h4 class="font-bold mb-2">⌨️ Atajos de teclado</h4>
+            <ul class="space-y-2 text-sm">
+              <li><span class="kbd">Ctrl/⌘ + Z</span> — Deshacer último cambio</li>
+              <li><span class="kbd">Ctrl/⌘ + Shift + Z</span> — Rehacer cambio</li>
+              <li><span class="kbd">←</span> / <span class="kbd">→</span> — Navegar entre meses (próximamente)</li>
+            </ul>
+          </div>
+          <div class="p-4 bg-emerald-50 rounded-xl">
+            <h4 class="font-bold mb-2">🎯 Funciones principales</h4>
+            <ul class="space-y-2 text-sm">
+              <li><strong>Drag & Drop:</strong> Arrastra fichas de ciclo a las zonas de turnos</li>
+              <li><strong>Duplicar:</strong> Usa el botón ⎘ para clonar una configuración</li>
+              <li><strong>Vista de 3 meses:</strong> Visualiza 3 meses continuos para mejor planificación</li>
+              <li><strong>Exportar:</strong> Descarga Excel con 12 meses de planificación</li>
+            </ul>
+          </div>
+          <div class="p-4 bg-amber-50 rounded-xl">
+            <h4 class="font-bold mb-2">💡 Tips</h4>
+            <ul class="space-y-2 text-sm">
+              <li>Los cambios se guardan automáticamente en tu navegador</li>
+              <li>Usa "Guardar" para crear un respaldo manual</li>
+              <li>El validador de reglas te ayuda a cumplir normativas laborales</li>
+            </ul>
+          </div>
+        </div>
+      `;
+      showModal('📖 Guía de uso', content);
+    }
+
+    function showTutorialModal() {
+      const content = `
+        <div class="space-y-4">
+          <div class="p-4 bg-blue-50 rounded-xl border-l-4 border-blue-500">
+            <h4 class="font-bold mb-2">Paso 1: Arrastra una ficha</h4>
+            <p class="text-sm">Selecciona una ficha de ciclo (4x3, 5x2, o 6x1) de los grupos disponibles y arrástrala a la zona de turno deseada (Día, Tarde o Noche).</p>
+          </div>
+          <div class="p-4 bg-purple-50 rounded-xl border-l-4 border-purple-500">
+            <h4 class="font-bold mb-2">Paso 2: Configura el ciclo</h4>
+            <p class="text-sm">Una vez asignado, puedes ajustar el ciclo, agregar un ciclo alternado (Ciclo 2), configurar el desfase inicial y el número de repeticiones.</p>
+          </div>
+          <div class="p-4 bg-green-50 rounded-xl border-l-4 border-green-500">
+            <h4 class="font-bold mb-2">Paso 3: Visualiza y exporta</h4>
+            <p class="text-sm">Usa las pestañas para ver diferentes vistas del calendario. Exporta a Excel para compartir o imprimir tu planificación.</p>
+          </div>
+          <div class="text-center mt-4">
+            <button onclick="this.closest('.modal-overlay').remove()" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-indigo-700">¡Entendido!</button>
+          </div>
+        </div>
+      `;
+      showModal('🎓 Tutorial rápido', content);
+    }
+
     // ---------- EVENTS ----------
     function wireBasics(){
       const sd=document.getElementById('startDate'); const ed=document.getElementById('endDate'); const vm=document.getElementById('visibleMonth'); const px=document.getElementById('btnExportXLSX'); const pr=document.getElementById('btnPrint'); const sv=document.getElementById('btnSave'); const ld=document.getElementById('btnLoad'); const rs=document.getElementById('btnReset');
 
       sd.value=state.startDate; ed.value=state.endDate;
 
-      sd.addEventListener('change', e=>{ pushHistory(); state.startDate=e.target.value; state.selectedMonth = state.startDate.slice(0,7); renderAll(); saveAuto(); });
+      sd.addEventListener('change', e=>{ pushHistory(); state.startDate=e.target.value; state.selectedMonth = state.startDate.slice(0,7); renderAll(); saveAuto(); updateBreadcrumb(); });
       ed.addEventListener('change', e=>{ pushHistory(); state.endDate=e.target.value; renderAll(); saveAuto(); });
-      vm.addEventListener('change', e=>{ state.selectedMonth=e.target.value; renderTab(currentTab()); });
+      vm.addEventListener('change', e=>{ state.selectedMonth=e.target.value; renderTab(currentTab()); updateBreadcrumb(); });
+
+      // Botones de navegación de mes
+      document.getElementById('btnPrevMonth')?.addEventListener('click', () => {
+        const opts = monthsAvailable(buildEngine().calendar);
+        const idx = opts.indexOf(state.selectedMonth);
+        if (idx > 0) {
+          state.selectedMonth = opts[idx - 1];
+          renderTab(currentTab());
+          updateBreadcrumb();
+          document.getElementById('visibleMonth').value = state.selectedMonth;
+        }
+      });
+
+      document.getElementById('btnNextMonth')?.addEventListener('click', () => {
+        const opts = monthsAvailable(buildEngine().calendar);
+        const idx = opts.indexOf(state.selectedMonth);
+        if (idx < opts.length - 1) {
+          state.selectedMonth = opts[idx + 1];
+          renderTab(currentTab());
+          updateBreadcrumb();
+          document.getElementById('visibleMonth').value = state.selectedMonth;
+        }
+      });
+
+      // Modales
+      document.getElementById('btnHelp')?.addEventListener('click', showHelpModal);
+      document.getElementById('btnTutorial')?.addEventListener('click', showTutorialModal);
 
       px.addEventListener('click', exportXLSX);
 
@@ -553,9 +1228,9 @@
         window.print();
       });
 
-      sv.addEventListener('click', ()=>{ localStorage.setItem('turnos_pro_state', JSON.stringify(state)); toast('Guardado en este navegador ✅'); });
-      ld.addEventListener('click', ()=>{ const raw=localStorage.getItem('turnos_pro_state'); if(!raw) return toast('No hay guardado previo'); pushHistory(); state=JSON.parse(raw); renderAll(); });
-      rs.addEventListener('click', ()=>{ if(confirm('¿Resetear al estado inicial?')){ pushHistory(); state=clone(defaultState); renderAll(); saveAuto(); }});
+      sv.addEventListener('click', ()=>{ localStorage.setItem('turnos_pro_state', JSON.stringify(state)); toast('💾 Guardado en este navegador', 'success'); });
+      ld.addEventListener('click', ()=>{ const raw=localStorage.getItem('turnos_pro_state'); if(!raw) return toast('⚠️ No hay guardado previo', 'error'); pushHistory(); state=JSON.parse(raw); renderAll(); toast('📂 Configuración cargada', 'success'); });
+      rs.addEventListener('click', ()=>{ if(confirm('¿Resetear al estado inicial?')){ pushHistory(); state=clone(defaultState); renderAll(); saveAuto(); toast('🧹 Sistema reseteado', 'info'); }});
 
       // Undo/Redo
       document.getElementById('btnUndo').addEventListener('click', undo);
@@ -565,27 +1240,193 @@
       // Theme toggle
       document.getElementById('btnDark').addEventListener('click', ()=>{ document.documentElement.classList.toggle('dark'); });
 
+      // Mode toggle (Automático/Manual)
+      document.getElementById('btnToggleMode').addEventListener('click', ()=>{
+        pushHistory();
+        state.manualMode = !state.manualMode;
+        updateModeUI();
+        renderAll();
+        saveAuto();
+        toast(state.manualMode ? '✏️ Modo manual activado' : '🤖 Modo automático activado', 'info');
+      });
+
       // Tabs
       document.querySelectorAll('.tab-btn').forEach(b=> b.addEventListener('click', ()=> renderTab(b.dataset.tab)));
     }
 
+    function updateModeUI() {
+      const btn = document.getElementById('btnToggleMode');
+      const label = document.getElementById('modeLabel');
+      if (state.manualMode) {
+        btn.className = 'px-4 py-2 rounded-lg font-bold transition-all bg-purple-500 text-white';
+        label.textContent = '✏️ Manual';
+      } else {
+        btn.className = 'px-4 py-2 rounded-lg font-bold transition-all bg-indigo-500 text-white';
+        label.textContent = '🤖 Automático';
+      }
+    }
+
     function wireZoneButtons(){ document.querySelectorAll('[data-action]').forEach(btn=>{ btn.addEventListener('change', onCardAction); btn.addEventListener('click', onCardAction); }); const apply=document.getElementById('btnApplyRules'); if(apply){ apply.onclick=()=>{ pushHistory(); state.rules.minFreeSundaysPerMonth=parseInt(document.getElementById('ruleSundays').value||2); state.rules.maxConsecutiveWorkDays=parseInt(document.getElementById('ruleStreak').value||6); renderTab('rules'); saveAuto(); } } }
 
-    function onCardAction(e){ const t=e.currentTarget; const act=t.dataset.action; if(!act) return; const shift=t.dataset.shift; const idx=parseInt(t.dataset.idx); pushHistory(); if(act==='del'){ state.shiftAssignments[shift].splice(idx,1); renderAll(); saveAuto(); return; } if(act==='dup'){ state.shiftAssignments[shift].splice(idx+1,0, clone(state.shiftAssignments[shift][idx])); renderAll(); saveAuto(); return; } if(act==='c1'){ state.shiftAssignments[shift][idx].cycle1=t.value; renderAll(); saveAuto(); return; } if(act==='c2'){ state.shiftAssignments[shift][idx].cycle2=t.value||null; renderAll(); saveAuto(); return; } if(act==='ofs'){ state.shiftAssignments[shift][idx].startOffset=parseInt(t.value||0); renderAll(); saveAuto(); return; } if(act==='r1'){ state.shiftAssignments[shift][idx].cycle1Repeat=parseInt(t.value||1); renderAll(); saveAuto(); return; } }
+    function onCardAction(e){
+      const t=e.currentTarget;
+      const act=t.dataset.action;
+      if(!act) return;
+      const shift=t.dataset.shift;
+      const idx=parseInt(t.dataset.idx);
+      pushHistory();
 
-    // Drag & Drop
-    function wireDnD(){ let dragged=null; document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.addEventListener('dragstart', ()=>{ dragged={ groupId: el.dataset.group, cycle: el.dataset.cycle }; }); }); document.querySelectorAll('[data-drop-zone]').forEach(zone=>{ zone.addEventListener('dragover', e=> e.preventDefault()); zone.addEventListener('drop', e=>{ e.preventDefault(); if(!dragged) return; const key=zone.dataset.dropZone; const list=state.shiftAssignments[key]; if(list.length>=state.maxGroupsPerShift) return alert('Este turno ya alcanzó el máximo de grupos'); if(list.some(a=> a.groupId===dragged.groupId)) return alert('Este grupo ya está asignado a este turno'); pushHistory(); list.push({ groupId: dragged.groupId, cycle1: dragged.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 }); dragged=null; renderAll(); saveAuto(); }); }); }
+      // Usar asignaciones manuales o automáticas según el modo
+      const assignments = state.manualMode ? state.manualAssignments : state.shiftAssignments;
+
+      if(act==='del'){ assignments[shift].splice(idx,1); renderAll(); saveAuto(); return; }
+      if(act==='dup'){ assignments[shift].splice(idx+1,0, clone(assignments[shift][idx])); renderAll(); saveAuto(); return; }
+      if(act==='c1'){ assignments[shift][idx].cycle1=t.value; renderAll(); saveAuto(); return; }
+      if(act==='c2'){ assignments[shift][idx].cycle2=t.value||null; renderAll(); saveAuto(); return; }
+      if(act==='ofs'){ assignments[shift][idx].startOffset=parseInt(t.value||0); renderAll(); saveAuto(); return; }
+      if(act==='r1'){ assignments[shift][idx].cycle1Repeat=parseInt(t.value||1); renderAll(); saveAuto(); return; }
+    }
+
+    // Drag & Drop con feedback visual
+    function wireDnD(){
+      let dragged=null;
+
+      document.querySelectorAll('[draggable="true"]').forEach(el=>{
+        el.addEventListener('dragstart', (e)=>{
+          dragged={ groupId: el.dataset.group, cycle: el.dataset.cycle };
+          el.classList.add('dragging');
+        });
+
+        el.addEventListener('dragend', ()=>{
+          el.classList.remove('dragging');
+        });
+      });
+
+      document.querySelectorAll('[data-drop-zone]').forEach(zone=>{
+        zone.addEventListener('dragover', e=> {
+          e.preventDefault();
+          zone.classList.add('drag-over');
+        });
+
+        zone.addEventListener('dragleave', ()=> {
+          zone.classList.remove('drag-over');
+        });
+
+        zone.addEventListener('drop', e=>{
+          e.preventDefault();
+          zone.classList.remove('drag-over');
+
+          if(!dragged) return;
+          const key=zone.dataset.dropZone;
+          // Usar asignaciones manuales o automáticas según el modo
+          const list = state.manualMode ? state.manualAssignments[key] : state.shiftAssignments[key];
+
+          if(list.length>=state.maxGroupsPerShift) {
+            toast('⚠️ Este turno ya alcanzó el máximo de grupos', 'error');
+            return;
+          }
+
+          if(list.some(a=> a.groupId===dragged.groupId)) {
+            toast('⚠️ Este grupo ya está asignado a este turno', 'error');
+            return;
+          }
+
+          pushHistory();
+          list.push({ groupId: dragged.groupId, cycle1: dragged.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 });
+          dragged=null;
+          renderAll();
+          saveAuto();
+          toast('✅ Grupo asignado exitosamente', 'success');
+        });
+      });
+
+      // Touch support para mobile
+      let touchItem = null;
+      document.querySelectorAll('[draggable="true"]').forEach(el => {
+        el.addEventListener('touchstart', (e) => {
+          touchItem = { groupId: el.dataset.group, cycle: el.dataset.cycle, element: el };
+          el.classList.add('dragging');
+        });
+
+        el.addEventListener('touchend', (e) => {
+          el.classList.remove('dragging');
+          const touch = e.changedTouches[0];
+          const dropZone = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-drop-zone]');
+
+          if (dropZone && touchItem) {
+            const key = dropZone.dataset.dropZone;
+            // Usar asignaciones manuales o automáticas según el modo
+            const list = state.manualMode ? state.manualAssignments[key] : state.shiftAssignments[key];
+
+            if(list.length >= state.maxGroupsPerShift) {
+              toast('⚠️ Este turno ya alcanzó el máximo de grupos', 'error');
+              touchItem = null;
+              return;
+            }
+
+            if(list.some(a => a.groupId === touchItem.groupId)) {
+              toast('⚠️ Este grupo ya está asignado a este turno', 'error');
+              touchItem = null;
+              return;
+            }
+
+            pushHistory();
+            list.push({ groupId: touchItem.groupId, cycle1: touchItem.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 });
+            renderAll();
+            saveAuto();
+            toast('✅ Grupo asignado exitosamente', 'success');
+          }
+
+          touchItem = null;
+        });
+      });
+    }
 
     // Undo/Redo impl
-    const undo=()=>{ if(!undoStack.length) return; const prev=undoStack.pop(); redoStack.push(clone(state)); state=prev; renderAll(); saveAuto(); };
-    const redo=()=>{ if(!redoStack.length) return; const next=redoStack.pop(); undoStack.push(clone(state)); state=next; renderAll(); saveAuto(); };
-    const toast=(msg)=>{ const el=document.createElement('div'); el.className='fixed z-[9999] bottom-6 left-1/2 -translate-x-1/2 glass rounded-xl px-4 py-2 shadow'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),1800); };
+    const undo=()=>{ if(!undoStack.length) return; const prev=undoStack.pop(); redoStack.push(clone(state)); state=prev; renderAll(); saveAuto(); toast('↩️ Cambio deshecho', 'info'); };
+    const redo=()=>{ if(!redoStack.length) return; const next=redoStack.pop(); undoStack.push(clone(state)); state=next; renderAll(); saveAuto(); toast('↪️ Cambio rehecho', 'info'); };
+
+    const toast=(msg, type='success')=>{
+      const el=document.createElement('div');
+      el.className=`toast toast-${type}`;
+      el.textContent=msg;
+      document.body.appendChild(el);
+      setTimeout(()=>{
+        el.style.opacity='0';
+        setTimeout(()=>el.remove(),300);
+      },2500);
+    };
+
     const saveAuto=()=> localStorage.setItem('turnos_pro_autosave', JSON.stringify(state));
 
-    function exportXLSX(){ 
-      const {calendar, byGroup} = buildEngine(); 
-      const wb = XLSX.utils.book_new(); 
-      const today = new Date().toISOString().slice(0,10); 
+    function showLoading(message = 'Procesando...') {
+      const loader = document.createElement('div');
+      loader.id = 'globalLoader';
+      loader.className = 'modal-overlay';
+      loader.innerHTML = `
+        <div class="bg-white rounded-2xl p-8 text-center">
+          <div class="spinner mx-auto mb-4"></div>
+          <div class="text-lg font-semibold">${message}</div>
+        </div>
+      `;
+      document.body.appendChild(loader);
+      return loader;
+    }
+
+    function hideLoading() {
+      const loader = document.getElementById('globalLoader');
+      if (loader) loader.remove();
+    }
+
+    function exportXLSX(){
+      const loader = showLoading('📊 Generando Excel de 12 meses...');
+
+      // Usar setTimeout para permitir que el loader se muestre
+      setTimeout(() => {
+        try {
+          const {calendar, byGroup} = buildEngine();
+          const wb = XLSX.utils.book_new();
+          const today = new Date().toISOString().slice(0,10); 
       
       // Hoja de Configuración
       const conf = [ 
@@ -673,13 +1514,13 @@
         });
       });
       
-      const wsAnual = XLSX.utils.aoa_to_sheet(annualRows);
-      wsAnual['!cols'] = [
-        { wch: 12 },  // Fecha
-        { wch: 12 },  // Día
-        ...allGroups.map(() => ({ wch: 10 }))  // Grupos
-      ];
-      XLSX.utils.book_append_sheet(wb, wsAnual, 'RESUMEN ANUAL');
+          const wsAnual = XLSX.utils.aoa_to_sheet(annualRows);
+          wsAnual['!cols'] = [
+            { wch: 12 },  // Fecha
+            { wch: 12 },  // Día
+            ...allGroups.map(() => ({ wch: 10 }))  // Grupos
+          ];
+          XLSX.utils.book_append_sheet(wb, wsAnual, 'RESUMEN ANUAL');
       
       // Crear hoja de estadísticas de domingos
       const sundayStats = {};
@@ -749,15 +1590,243 @@
       });
       sundayRows.push(avgRow);
       
-      const wsSundays = XLSX.utils.aoa_to_sheet(sundayRows);
-      XLSX.utils.book_append_sheet(wb, wsSundays, 'DOMINGOS (12 meses)');
-      
-      XLSX.writeFile(wb, `Turnos_Anual_${today}.xlsx`);
-      toast('✅ Excel de 12 meses exportado exitosamente');
+          const wsSundays = XLSX.utils.aoa_to_sheet(sundayRows);
+          XLSX.utils.book_append_sheet(wb, wsSundays, 'DOMINGOS (12 meses)');
+
+          XLSX.writeFile(wb, `Turnos_Anual_${today}.xlsx`);
+          hideLoading();
+          toast('✅ Excel de 12 meses exportado exitosamente', 'success');
+        } catch (error) {
+          hideLoading();
+          toast('❌ Error al generar Excel: ' + error.message, 'error');
+          console.error(error);
+        }
+      }, 100);
+    }
+
+    // ---------- MANUAL CALENDAR DRAG & DROP ----------
+    function wireManualDnD() {
+      let draggedCycle = null;
+
+      // Fichas de ciclos (nueva interfaz)
+      document.querySelectorAll('[data-cycle-shift]').forEach(chip => {
+        chip.addEventListener('dragstart', (e) => {
+          draggedCycle = {
+            shift: chip.dataset.cycleShift,
+            cycle: chip.dataset.cycleType
+          };
+          chip.classList.add('dragging');
+        });
+
+        chip.addEventListener('dragend', () => {
+          chip.classList.remove('dragging');
+        });
+      });
+
+      // Celdas del calendario (nueva interfaz)
+      document.querySelectorAll('[data-drop-manual-day]').forEach(cell => {
+        cell.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          cell.classList.add('drag-over');
+        });
+
+        cell.addEventListener('dragleave', () => {
+          cell.classList.remove('drag-over');
+        });
+
+        cell.addEventListener('drop', (e) => {
+          e.preventDefault();
+          cell.classList.remove('drag-over');
+
+          if (draggedCycle) {
+            const date = cell.dataset.dropManualDay;
+            pushHistory();
+            applyCycleToManual(date, draggedCycle.shift, draggedCycle.cycle);
+            renderTab('manual');
+            saveAuto();
+            toast(`✅ Ciclo ${draggedCycle.cycle} de ${draggedCycle.shift} aplicado desde ${new Date(date).toLocaleDateString('es-CL')}`, 'success');
+            draggedCycle = null;
+          }
+        });
+      });
+
+      // Click en día para eliminar
+      document.querySelectorAll('[data-manual-day-cell]').forEach(cell => {
+        cell.addEventListener('click', () => {
+          const date = cell.dataset.manualDayCell;
+          if (state.manualDays[date] && state.manualDays[date] !== 'rest') {
+            pushHistory();
+            delete state.manualDays[date];
+            renderTab('manual');
+            saveAuto();
+            toast('🗑️ Día eliminado', 'info');
+          }
+        });
+      });
+
+      // Botón limpiar todos los días
+      document.getElementById('btnClearManualDays')?.addEventListener('click', () => {
+        if (confirm('¿Estás seguro de limpiar todos los días asignados?')) {
+          pushHistory();
+          state.manualDays = {};
+          renderTab('manual');
+          saveAuto();
+          toast('🧹 Todos los días limpiados', 'info');
+        }
+      });
+    }
+
+    function assignManualShift(date, shiftId) {
+      // Asegurar que manualCalendar exista
+      if (!state.manualCalendar) {
+        state.manualCalendar = {};
+      }
+
+      if (!state.manualCalendar[date]) {
+        state.manualCalendar[date] = { shifts: [] };
+      }
+
+      // Validación: no repetir el mismo turno en un día
+      if (state.manualCalendar[date].shifts.includes(shiftId)) {
+        toast(`⚠️ Ya existe un turno de ${getShiftLabel(shiftId)} en este día`, 'error');
+        return;
+      }
+
+      pushHistory();
+      state.manualCalendar[date].shifts.push(shiftId);
+      saveAuto();
+      renderTab('manual');
+      toast(`✅ Turno de ${getShiftLabel(shiftId)} asignado`, 'success');
+    }
+
+    function removeManualShift(date, shiftId) {
+      // Asegurar que manualCalendar exista
+      if (!state.manualCalendar) {
+        state.manualCalendar = {};
+      }
+
+      if (!state.manualCalendar[date]) return;
+
+      pushHistory();
+      state.manualCalendar[date].shifts = state.manualCalendar[date].shifts.filter(s => s !== shiftId);
+
+      // Limpiar el día si no tiene turnos
+      if (state.manualCalendar[date].shifts.length === 0) {
+        delete state.manualCalendar[date];
+      }
+
+      saveAuto();
+      renderTab('manual');
+      toast(`🗑️ Turno de ${getShiftLabel(shiftId)} eliminado`, 'info');
+    }
+
+    function clearManualMonth() {
+      // Asegurar que manualCalendar exista
+      if (!state.manualCalendar) {
+        state.manualCalendar = {};
+      }
+
+      const month = state.selectedMonth;
+      pushHistory();
+
+      // Eliminar solo los días del mes actual
+      Object.keys(state.manualCalendar).forEach(date => {
+        if (date.startsWith(month)) {
+          delete state.manualCalendar[date];
+        }
+      });
+
+      saveAuto();
+      renderTab('manual');
+      toast('🧹 Mes limpiado completamente', 'info');
+    }
+
+    function getShiftLabel(shiftId) {
+      const labels = { day: 'Día', afternoon: 'Tarde', night: 'Noche', rest: 'Descanso' };
+      return labels[shiftId] || shiftId;
+    }
+
+    function exportManualCalendar() {
+      // Asegurar que manualCalendar exista
+      if (!state.manualCalendar) {
+        state.manualCalendar = {};
+      }
+
+      const loader = showLoading('📊 Generando Excel del calendario manual...');
+
+      setTimeout(() => {
+        try {
+          const wb = XLSX.utils.book_new();
+          const today = new Date().toISOString().slice(0, 10);
+
+          // Hoja del calendario manual
+          const month = state.selectedMonth;
+          const days = daysInMonth(month);
+
+          const rows = [
+            ['Fecha', 'Día Semana', 'Turnos Asignados'],
+            []
+          ];
+
+          days.forEach(day => {
+            const dateStr = day.date;
+            const dayData = state.manualCalendar[dateStr];
+            const weekday = day.js.toLocaleDateString('es-CL', { weekday: 'long' });
+            const shifts = dayData && dayData.shifts.length > 0
+              ? dayData.shifts.map(s => getShiftLabel(s)).join(', ')
+              : '-';
+
+            rows.push([
+              day.js.toLocaleDateString('es-CL'),
+              weekday,
+              shifts
+            ]);
+          });
+
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 30 }];
+
+          XLSX.utils.book_append_sheet(wb, ws, 'Calendario Manual');
+
+          XLSX.writeFile(wb, `Calendario_Manual_${month}_${today}.xlsx`);
+          hideLoading();
+          toast('✅ Calendario manual exportado exitosamente', 'success');
+        } catch (error) {
+          hideLoading();
+          toast('❌ Error al exportar: ' + error.message, 'error');
+          console.error(error);
+        }
+      }, 100);
     }
 
     // ---------- INIT ----------
-    (function init(){ const auto=localStorage.getItem('turnos_pro_autosave'); if(auto){ try{ state=JSON.parse(auto);}catch{} } if(!state.selectedMonth){ state.selectedMonth = state.startDate.slice(0,7); } wireBasics(); renderAll(); })();
+    (function init(){
+      const auto=localStorage.getItem('turnos_pro_autosave');
+      if(auto){ try{ state=JSON.parse(auto);}catch{} }
+      if(!state.selectedMonth){ state.selectedMonth = state.startDate.slice(0,7); }
+      // Asegurar que propiedades nuevas existan (para compatibilidad con estados antiguos)
+      if(!state.manualCalendar){ state.manualCalendar = {}; }
+      if(state.manualMode === undefined){ state.manualMode = false; }
+      if(!state.manualAssignments){ state.manualAssignments = { day: [], afternoon: [], night: [] }; }
+      if(!state.manualDays){ state.manualDays = {}; }
+
+      wireBasics();
+      updateModeUI(); // Actualizar UI del modo
+      renderAll();
+      renderTab('by-group'); // Mostrar pestaña por defecto
+      updateBreadcrumb();
+
+      // Anunciar página cargada para lectores de pantalla
+      setTimeout(() => {
+        const announcement = document.createElement('div');
+        announcement.setAttribute('role', 'status');
+        announcement.setAttribute('aria-live', 'polite');
+        announcement.className = 'sr-only';
+        announcement.textContent = 'Simulador de turnos cargado correctamente. Use Tab para navegar entre controles.';
+        document.body.appendChild(announcement);
+        setTimeout(() => announcement.remove(), 3000);
+      }, 1000);
+    })();
   </script>
 </body>
 </html>
