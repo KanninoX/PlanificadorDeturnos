@@ -542,7 +542,11 @@
         afternoon: [],
         night:     []
       },
-      manualDays: {}, // { 'YYYY-MM-DD': 'day' | 'afternoon' | 'night' | 'rest' }
+      manualGroupCount: 3, // Cantidad de grupos en modo manual
+      manualGroups: {
+        // { 'MG1': { shift: 'day', cycle: '6x1', startDate: '2025-10-01', startOffset: 0 } }
+      },
+      manualDays: {}, // DEPRECATED
       manualCalendar: {} // DEPRECATED: mantener para compatibilidad con versiones antiguas
     };
 
@@ -590,12 +594,29 @@
     function buildManualCalendar(){
       const start=new Date(state.startDate), end=new Date(state.endDate);
       const calendar={ day:[], afternoon:[], night:[] };
+      const byGroup={};
 
-      // Generar calendario día por día usando manualDays
+      // Inicializar engine para cada grupo manual
+      const engine = {};
+      Object.entries(state.manualGroups).forEach(([groupId, groupData]) => {
+        const c1 = cycleTuple(groupData.cycle);
+        const span = c1[0] + c1[1];
+
+        engine[groupId] = {
+          shift: groupData.shift,
+          cycle: groupData.cycle,
+          c1Work: c1[0],
+          c1Span: span,
+          cycleDay: groupData.startOffset || 0,
+          startDate: groupData.startDate
+        };
+        byGroup[groupId] = [];
+      });
+
+      // Generar calendario día por día
       for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
         const dateStr = t.toISOString().slice(0,10);
         const isSunday = t.getDay()===0;
-        const assignedShift = state.manualDays[dateStr] || 'rest';
 
         const row = {
           day:{date:dateStr,isSunday,groups:[]},
@@ -603,69 +624,75 @@
           night:{date:dateStr,isSunday,groups:[]}
         };
 
-        // Si el día tiene un turno asignado, agregar un grupo genérico
-        if(assignedShift !== 'rest'){
-          row[assignedShift].groups.push({
-            groupId:'MANUAL',
-            isWorking:true,
-            currentCycleType:1
-          });
-        }
+        Object.entries(engine).forEach(([groupId, e]) => {
+          // Solo aplicar el ciclo si ya pasó la fecha de inicio
+          if (dateStr >= e.startDate) {
+            const isWork = e.cycleDay < e.c1Work;
+
+            row[e.shift].groups.push({
+              groupId: groupId,
+              isWorking: isWork,
+              currentCycleType: 1
+            });
+
+            byGroup[groupId].push({
+              date: dateStr,
+              isSunday,
+              isWorking: isWork,
+              shift: isWork ? e.shift : 'rest',
+              currentCycleType: 1
+            });
+
+            // Avanzar en el ciclo
+            e.cycleDay++;
+            if(e.cycleDay >= e.c1Span){
+              e.cycleDay = 0;
+            }
+          } else {
+            // Antes de la fecha de inicio, descanso
+            byGroup[groupId].push({
+              date: dateStr,
+              isSunday,
+              isWorking: false,
+              shift: 'rest',
+              currentCycleType: 1
+            });
+          }
+        });
 
         calendar.day.push(row.day);
         calendar.afternoon.push(row.afternoon);
         calendar.night.push(row.night);
       }
 
-      // Para byGroup, crear un solo grupo "MANUAL" que muestra todos los días asignados
-      const byGroup = { 'MANUAL': [] };
-      for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
-        const dateStr = t.toISOString().slice(0,10);
-        const isSunday = t.getDay()===0;
-        const assignedShift = state.manualDays[dateStr] || 'rest';
-
-        byGroup['MANUAL'].push({
-          date:dateStr,
-          isSunday,
-          isWorking: assignedShift !== 'rest',
-          shift: assignedShift,
-          currentCycleType:1
-        });
-      }
-
       return {calendar, byGroup};
     }
 
-    // Función para aplicar un ciclo desde una fecha inicial
-    function applyCycleToManual(startDate, shift, cycleType) {
-      if (!state.manualDays) {
-        state.manualDays = {};
+    // Funciones helper para modo manual
+    function getManualGroupIds() {
+      const ids = [];
+      for(let i = 1; i <= state.manualGroupCount; i++) {
+        ids.push(`MG${i}`);
+      }
+      return ids;
+    }
+
+    function assignCycleToManualGroup(groupId, shift, cycle, startDate) {
+      if (!state.manualGroups) {
+        state.manualGroups = {};
       }
 
-      const [workDays, restDays] = cycleTuple(cycleType);
-      const totalDays = workDays + restDays;
+      state.manualGroups[groupId] = {
+        shift: shift,
+        cycle: cycle,
+        startDate: startDate,
+        startOffset: 0
+      };
+    }
 
-      // Aplicar el ciclo por 90 días (aproximadamente 3 meses)
-      let currentDate = new Date(startDate);
-      const endDate = new Date(currentDate);
-      endDate.setDate(endDate.getDate() + 90);
-
-      let dayInCycle = 0;
-      while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString().slice(0, 10);
-
-        if (dayInCycle < workDays) {
-          state.manualDays[dateStr] = shift;
-        } else {
-          state.manualDays[dateStr] = 'rest';
-        }
-
-        dayInCycle++;
-        if (dayInCycle >= totalDays) {
-          dayInCycle = 0;
-        }
-
-        currentDate.setDate(currentDate.getDate() + 1);
+    function removeManualGroup(groupId) {
+      if (state.manualGroups && state.manualGroups[groupId]) {
+        delete state.manualGroups[groupId];
       }
     }
 
@@ -685,6 +712,17 @@
       const opts = monthsAvailable(calendar);
       if(!opts.includes(state.selectedMonth)) state.selectedMonth = opts[0] || state.startDate.slice(0,7);
       select.innerHTML = opts.map(m=>`<option value="${m}" ${m===state.selectedMonth?'selected':''}>${new Date(m+'-01').toLocaleDateString('es-CL',{month:'long',year:'numeric'})}</option>`).join('');
+
+      // Ocultar/mostrar secciones según el modo
+      const paletteSection = document.querySelector('.groups-palette');
+      const zonesSection = document.querySelector('.zones-area');
+      if (state.manualMode) {
+        paletteSection.style.display = 'none';
+        zonesSection.style.display = 'none';
+      } else {
+        paletteSection.style.display = 'block';
+        zonesSection.style.display = 'block';
+      }
 
       const pal = document.getElementById('groupsPalette');
       pal.innerHTML = state.groups.map(g=>{
@@ -959,109 +997,133 @@
 
     // ---------- MANUAL CALENDAR ----------
     function renderManualCalendar() {
-      // Asegurar que manualDays exista
-      if (!state.manualDays) {
-        state.manualDays = {};
-      }
+      // Asegurar que propiedades existan
+      if (!state.manualGroups) state.manualGroups = {};
 
-      const baseMonth = new Date(state.selectedMonth + '-01');
-      const months = [];
-      for (let i = 0; i < 3; i++) {
-        const m = new Date(baseMonth);
-        m.setMonth(baseMonth.getMonth() + i);
-        months.push(m.toISOString().slice(0, 7));
-      }
+      const cycles = ['4x3', '5x2', '6x1'];
 
-      // Combinar todos los días de los 3 meses
-      const allDays = [];
-      months.forEach(month => {
-        const days = daysInMonth(month);
-        allDays.push(...days);
+      // Contar grupos asignados a cada turno
+      const assignedCounts = { day: 0, afternoon: 0, night: 0 };
+      Object.values(state.manualGroups).forEach(g => {
+        if (g.shift) assignedCounts[g.shift]++;
       });
-
-      const cycles = ['6x1', '5x2', '4x3'];
-      const shifts = [
-        { id: 'day', label: 'DÍA', emoji: '☀️', color: 'bg-amber-100', borderColor: 'border-amber-500' },
-        { id: 'afternoon', label: 'TARDE', emoji: '🌤️', color: 'bg-orange-100', borderColor: 'border-orange-500' },
-        { id: 'night', label: 'NOCHE', emoji: '🌙', color: 'bg-indigo-100', borderColor: 'border-indigo-500' }
-      ];
 
       return `
         <div class="space-y-6">
-          <!-- Paletas de ciclos por turno -->
-          <div class="grid md:grid-cols-3 gap-4">
-            ${shifts.map(shift => `
-              <div class="glass rounded-xl p-4 ${shift.borderColor} border-2">
-                <h3 class="text-lg font-bold mb-3 text-center ${shift.color} rounded-lg py-2">
-                  ${shift.emoji} ${shift.label}
-                </h3>
-                <div class="space-y-2">
-                  ${cycles.map(cycle => `
-                    <div
-                      draggable="true"
-                      data-cycle-shift="${shift.id}"
-                      data-cycle-type="${cycle}"
-                      class="cursor-grab p-3 bg-white rounded-lg border-2 ${shift.borderColor} hover:shadow-lg transition-all text-center font-bold"
-                      title="Arrastra para aplicar ${cycle} de ${shift.label}"
-                    >
-                      ${cycle}
+          <!-- Grupos disponibles -->
+          <div class="glass rounded-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-2xl font-bold flex items-center gap-2">
+                👥 Grupos disponibles
+              </h2>
+              <span class="text-sm text-slate-600">👉 Arrastra una ficha de ciclo a un turno</span>
+            </div>
+
+            <div class="grid grid-cols-8 gap-4">
+              ${state.groups.map(g => {
+                const color = groupColors[g];
+                const border = groupBorders[g];
+                return `
+                  <div class="space-y-2">
+                    <div class="${color} rounded-xl p-3 text-center font-bold text-lg">
+                      G${g}
                     </div>
-                  `).join('')}
-                </div>
+                    ${cycles.map(cycle => `
+                      <div
+                        draggable="true"
+                        data-manual-group="${g}"
+                        data-manual-cycle="${cycle}"
+                        class="cursor-grab p-2 bg-white rounded-lg border-2 ${border} hover:shadow-lg transition-all text-center font-semibold text-sm"
+                        title="Arrastra G${g} con ciclo ${cycle} a un turno"
+                      >
+                        ⋮⋮ ${cycle}
+                      </div>
+                    `).join('')}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Zonas de Drop: DÍA, TARDE, NOCHE -->
+          <div class="grid md:grid-cols-3 gap-6">
+            <div class="glass rounded-xl p-6 border-l-4 border-amber-500" data-manual-drop-zone="day">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-2xl font-bold text-amber-900">☀️ DÍA</h3>
+                <span class="text-sm text-slate-600">(${assignedCounts.day}/${state.maxGroupsPerShift} grupos)</span>
               </div>
-            `).join('')}
-          </div>
 
-          <!-- Instrucciones -->
-          <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200">
-            <strong>💡 Cómo usar:</strong>
-            <ul class="list-disc list-inside mt-2 text-sm space-y-1">
-              <li>Arrastra un ciclo (6x1, 5x2, 4x3) desde un turno</li>
-              <li>Suéltalo en una fecha del calendario</li>
-              <li>El patrón se aplicará automáticamente desde esa fecha</li>
-              <li>Haz clic en un día para eliminarlo</li>
-            </ul>
-          </div>
+              <div class="min-h-[400px] border-2 border-dashed border-amber-300 rounded-xl p-4 bg-amber-50/30" data-manual-drop-zone="day">
+                ${Object.entries(state.manualGroups)
+                  .filter(([gid, data]) => data.shift === 'day')
+                  .map(([gid, data]) => {
+                    const group = gid;
+                    const color = groupColors[group];
+                    return `
+                      <div class="${color} rounded-xl p-3 mb-2 flex items-center justify-between">
+                        <div>
+                          <div class="font-bold">G${group}</div>
+                          <div class="text-xs">Ciclo: ${data.cycle}</div>
+                        </div>
+                        <button class="text-rose-600 hover:text-rose-800 font-bold" onclick="removeManualGroup('${gid}'); renderTab('manual'); saveAuto();">🗑️</button>
+                      </div>
+                    `;
+                  }).join('') ||
+                  '<div class="text-center text-slate-400 mt-20">Arrastra aquí para asignar</div>'}
+              </div>
+            </div>
 
-          <!-- Calendario de 3 meses -->
-          <div class="scroll-hint">
-            <span>➡️ Desliza horizontalmente para ver los ${allDays.length} días de ${months.length} meses</span>
-          </div>
-          <div class="calendar-container">
-            <table class="border-collapse text-xs" style="width: auto; min-width: max-content;">
-              <thead>
-                <tr class="bg-slate-100">
-                  ${allDays.map(d => {
-                    const isFirst = d.js.getDate() === 1;
-                    const mon = d.js.toLocaleDateString('es-CL', {month: 'short'}).toUpperCase();
-                    return `<th class="border p-1 ${d.isSunday ? 'bg-blue-100' : ''} ${isFirst ? 'border-l-4 border-l-rose-500' : ''}" data-drop-manual-day="${d.date}">
-                      ${isFirst ? `<div class="text-rose-600 font-bold text-[10px]">${mon}</div>` : ''}
-                      <div class="font-bold">${d.js.getDate()}</div>
-                      <div class="text-[10px]">${d.js.toLocaleDateString('es-CL', {weekday: 'short'})}</div>
-                    </th>`;
-                  }).join('')}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  ${allDays.map(d => {
-                    const assignedShift = state.manualDays[d.date] || 'rest';
-                    const cls = assignedShift === 'day' ? 'shift-day' : assignedShift === 'afternoon' ? 'shift-afternoon' : assignedShift === 'night' ? 'shift-night' : 'shift-rest';
-                    const label = assignedShift === 'day' ? 'Día' : assignedShift === 'afternoon' ? 'Tarde' : assignedShift === 'night' ? 'Noche' : '-';
-                    return `<td class="border p-1 text-center ${cls} cursor-pointer" title="${label}" data-drop-manual-day="${d.date}" data-manual-day-cell="${d.date}">
-                      <div class="font-semibold text-[11px] py-1">${label}</div>
-                    </td>`;
-                  }).join('')}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <div class="glass rounded-xl p-6 border-l-4 border-orange-500" data-manual-drop-zone="afternoon">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-2xl font-bold text-orange-900">🌤️ TARDE</h3>
+                <span class="text-sm text-slate-600">(${assignedCounts.afternoon}/${state.maxGroupsPerShift} grupos)</span>
+              </div>
 
-          <!-- Botones de control -->
-          <div class="flex gap-2">
-            <button id="btnClearManualDays" class="px-4 py-2 bg-rose-100 text-rose-700 rounded-xl hover:bg-rose-200 font-semibold">
-              🗑️ Limpiar todos los días
-            </button>
+              <div class="min-h-[400px] border-2 border-dashed border-orange-300 rounded-xl p-4 bg-orange-50/30" data-manual-drop-zone="afternoon">
+                ${Object.entries(state.manualGroups)
+                  .filter(([gid, data]) => data.shift === 'afternoon')
+                  .map(([gid, data]) => {
+                    const group = gid;
+                    const color = groupColors[group];
+                    return `
+                      <div class="${color} rounded-xl p-3 mb-2 flex items-center justify-between">
+                        <div>
+                          <div class="font-bold">G${group}</div>
+                          <div class="text-xs">Ciclo: ${data.cycle}</div>
+                        </div>
+                        <button class="text-rose-600 hover:text-rose-800 font-bold" onclick="removeManualGroup('${gid}'); renderTab('manual'); saveAuto();">🗑️</button>
+                      </div>
+                    `;
+                  }).join('') ||
+                  '<div class="text-center text-slate-400 mt-20">Arrastra aquí para asignar</div>'}
+              </div>
+            </div>
+
+            <div class="glass rounded-xl p-6 border-l-4 border-indigo-500" data-manual-drop-zone="night">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-2xl font-bold text-indigo-900">🌙 NOCHE</h3>
+                <span class="text-sm text-slate-600">(${assignedCounts.night}/${state.maxGroupsPerShift} grupos)</span>
+              </div>
+
+              <div class="min-h-[400px] border-2 border-dashed border-indigo-300 rounded-xl p-4 bg-indigo-50/30" data-manual-drop-zone="night">
+                ${Object.entries(state.manualGroups)
+                  .filter(([gid, data]) => data.shift === 'night')
+                  .map(([gid, data]) => {
+                    const group = gid;
+                    const color = groupColors[group];
+                    return `
+                      <div class="${color} rounded-xl p-3 mb-2 flex items-center justify-between">
+                        <div>
+                          <div class="font-bold">G${group}</div>
+                          <div class="text-xs">Ciclo: ${data.cycle}</div>
+                        </div>
+                        <button class="text-rose-600 hover:text-rose-800 font-bold" onclick="removeManualGroup('${gid}'); renderTab('manual'); saveAuto();">🗑️</button>
+                      </div>
+                    `;
+                  }).join('') ||
+                  '<div class="text-center text-slate-400 mt-20">Arrastra aquí para asignar</div>'}
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -1606,14 +1668,14 @@
 
     // ---------- MANUAL CALENDAR DRAG & DROP ----------
     function wireManualDnD() {
-      let draggedCycle = null;
+      let draggedItem = null;
 
-      // Fichas de ciclos (nueva interfaz)
-      document.querySelectorAll('[data-cycle-shift]').forEach(chip => {
+      // Drag de grupos con ciclos
+      document.querySelectorAll('[data-manual-group]').forEach(chip => {
         chip.addEventListener('dragstart', (e) => {
-          draggedCycle = {
-            shift: chip.dataset.cycleShift,
-            cycle: chip.dataset.cycleType
+          draggedItem = {
+            group: chip.dataset.manualGroup,
+            cycle: chip.dataset.manualCycle
           };
           chip.classList.add('dragging');
         });
@@ -1623,56 +1685,50 @@
         });
       });
 
-      // Celdas del calendario (nueva interfaz)
-      document.querySelectorAll('[data-drop-manual-day]').forEach(cell => {
-        cell.addEventListener('dragover', (e) => {
+      // Drop en zonas de turnos (DÍA, TARDE, NOCHE)
+      document.querySelectorAll('[data-manual-drop-zone]').forEach(zone => {
+        zone.addEventListener('dragover', (e) => {
           e.preventDefault();
-          cell.classList.add('drag-over');
+          zone.classList.add('drag-over');
         });
 
-        cell.addEventListener('dragleave', () => {
-          cell.classList.remove('drag-over');
+        zone.addEventListener('dragleave', () => {
+          zone.classList.remove('drag-over');
         });
 
-        cell.addEventListener('drop', (e) => {
+        zone.addEventListener('drop', (e) => {
           e.preventDefault();
-          cell.classList.remove('drag-over');
+          zone.classList.remove('drag-over');
 
-          if (draggedCycle) {
-            const date = cell.dataset.dropManualDay;
+          if (draggedItem) {
+            const shift = zone.dataset.manualDropZone;
+            const groupId = draggedItem.group;
+            const cycle = draggedItem.cycle;
+
+            // Verificar si ya está asignado a otro turno
+            const existingAssignment = Object.entries(state.manualGroups).find(([gid, data]) => gid === groupId);
+            if (existingAssignment) {
+              toast(`⚠️ G${groupId} ya está asignado a ${existingAssignment[1].shift}. Elimínalo primero.`, 'error');
+              draggedItem = null;
+              return;
+            }
+
+            // Verificar límite de grupos por turno
+            const currentCount = Object.values(state.manualGroups).filter(g => g.shift === shift).length;
+            if (currentCount >= state.maxGroupsPerShift) {
+              toast(`⚠️ El turno ${shift} ya tiene ${state.maxGroupsPerShift} grupos asignados`, 'error');
+              draggedItem = null;
+              return;
+            }
+
             pushHistory();
-            applyCycleToManual(date, draggedCycle.shift, draggedCycle.cycle);
+            assignCycleToManualGroup(groupId, shift, cycle, state.startDate);
             renderTab('manual');
             saveAuto();
-            toast(`✅ Ciclo ${draggedCycle.cycle} de ${draggedCycle.shift} aplicado desde ${new Date(date).toLocaleDateString('es-CL')}`, 'success');
-            draggedCycle = null;
+            toast(`✅ G${groupId} con ciclo ${cycle} asignado a ${shift}`, 'success');
+            draggedItem = null;
           }
         });
-      });
-
-      // Click en día para eliminar
-      document.querySelectorAll('[data-manual-day-cell]').forEach(cell => {
-        cell.addEventListener('click', () => {
-          const date = cell.dataset.manualDayCell;
-          if (state.manualDays[date] && state.manualDays[date] !== 'rest') {
-            pushHistory();
-            delete state.manualDays[date];
-            renderTab('manual');
-            saveAuto();
-            toast('🗑️ Día eliminado', 'info');
-          }
-        });
-      });
-
-      // Botón limpiar todos los días
-      document.getElementById('btnClearManualDays')?.addEventListener('click', () => {
-        if (confirm('¿Estás seguro de limpiar todos los días asignados?')) {
-          pushHistory();
-          state.manualDays = {};
-          renderTab('manual');
-          saveAuto();
-          toast('🧹 Todos los días limpiados', 'info');
-        }
       });
     }
 
@@ -1809,6 +1865,8 @@
       if(state.manualMode === undefined){ state.manualMode = false; }
       if(!state.manualAssignments){ state.manualAssignments = { day: [], afternoon: [], night: [] }; }
       if(!state.manualDays){ state.manualDays = {}; }
+      if(!state.manualGroups){ state.manualGroups = {}; }
+      if(!state.manualGroupCount){ state.manualGroupCount = 3; }
 
       wireBasics();
       updateModeUI(); // Actualizar UI del modo
