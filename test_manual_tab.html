@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Test Manual Tab</title>
+  <script>
+    window.addEventListener('DOMContentLoaded', function() {
+      console.log('=== TEST: Verificando pestañas ===');
+
+      // Verificar que existen las pestañas
+      const tabs = document.querySelectorAll('.tab-btn');
+      console.log('Pestañas encontradas:', tabs.length);
+      tabs.forEach((tab, index) => {
+        console.log(`Pestaña ${index + 1}:`, tab.dataset.tab, tab.textContent.trim());
+      });
+
+      // Verificar específicamente la pestaña manual
+      const manualTab = document.querySelector('[data-tab="manual"]');
+      if (manualTab) {
+        console.log('✅ Pestaña manual encontrada:', manualTab);
+        console.log('onclick:', manualTab.onclick);
+        console.log('event listeners:', getEventListeners ? getEventListeners(manualTab) : 'Use Chrome DevTools');
+      } else {
+        console.error('❌ Pestaña manual NO encontrada');
+      }
+
+      // Probar click manualmente
+      console.log('\n=== Probando click manual ===');
+      if (manualTab) {
+        manualTab.click();
+        console.log('Click ejecutado en pestaña manual');
+      }
+    });
+  </script>
+</head>
+<body>
+  <h1>Test de Pestaña Manual</h1>
+  <p>Abre la consola del navegador (F12) para ver los resultados.</p>
+  <p>Luego abre el archivo principal y revisa si hay errores similares.</p>
+
+  <div class="flex flex-wrap gap-2">
+    <button class="tab-btn" data-tab="by-group">👥 Vista por grupos</button>
+    <button class="tab-btn" data-tab="by-shift">📊 Vista por turnos</button>
+    <button class="tab-btn" data-tab="manual">✏️ Construcción manual</button>
+    <button class="tab-btn" data-tab="stats">📈 Métricas & domingos</button>
+    <button class="tab-btn" data-tab="rules">✅ Validador de reglas</button>
+  </div>
+
+  <div id="tabContent" style="margin-top: 20px; padding: 20px; border: 2px solid #ccc;">
+    Contenido de la pestaña aparecerá aquí
+  </div>
+
+  <script>
+    // Simular renderTab
+    function renderTab(tab) {
+      console.log('renderTab llamado con:', tab);
+      document.getElementById('tabContent').innerHTML = '<h2>Pestaña: ' + tab + '</h2>';
+
+      // Marcar pestaña activa
+      document.querySelectorAll('.tab-btn').forEach(b => b.style.background = '');
+      const activeBtn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+      if (activeBtn) activeBtn.style.background = 'lightblue';
+    }
+
+    // Agregar event listeners
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        console.log('Click en pestaña:', b.dataset.tab);
+        renderTab(b.dataset.tab);
+      });
+    });
+  </script>
+</body>
+</html>
