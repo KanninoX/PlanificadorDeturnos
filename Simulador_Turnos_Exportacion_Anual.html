@@ -516,7 +516,6 @@
       <!-- TABS - MANUAL -->
       <section class="grid gap-4 tabs-area">
         <div class="flex flex-wrap gap-2 no-print" role="tablist" aria-label="Vistas del calendario - Modo manual">
-          <button class="tab-btn-manual px-3 py-2 glass rounded-xl font-semibold" data-tab="calendar" role="tab" aria-controls="tabContentManual">📅 Calendario interactivo</button>
           <button class="tab-btn-manual px-3 py-2 glass rounded-xl font-semibold" data-tab="by-group" role="tab" aria-controls="tabContentManual">👥 Vista por grupos</button>
           <button class="tab-btn-manual px-3 py-2 glass rounded-xl font-semibold" data-tab="by-shift" role="tab" aria-controls="tabContentManual">📊 Vista por turnos</button>
           <button class="tab-btn-manual px-3 py-2 glass rounded-xl font-semibold" data-tab="stats" role="tab" aria-controls="tabContentManual">📈 Métricas & domingos</button>
@@ -729,38 +728,6 @@
       return {calendar, byGroup};
     }
 
-    // Función para aplicar un ciclo desde una fecha inicial
-    function applyCycleToManual(startDate, shift, cycleType) {
-      if (!state.manualDays) {
-        state.manualDays = {};
-      }
-
-      const [workDays, restDays] = cycleTuple(cycleType);
-      const totalDays = workDays + restDays;
-
-      // Aplicar el ciclo por 90 días (aproximadamente 3 meses)
-      let currentDate = new Date(startDate);
-      const endDate = new Date(currentDate);
-      endDate.setDate(endDate.getDate() + 90);
-
-      let dayInCycle = 0;
-      while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString().slice(0, 10);
-
-        if (dayInCycle < workDays) {
-          state.manualDays[dateStr] = shift;
-        } else {
-          state.manualDays[dateStr] = 'rest';
-        }
-
-        dayInCycle++;
-        if (dayInCycle >= totalDays) {
-          dayInCycle = 0;
-        }
-
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    }
 
     const monthsAvailable = (calendar)=>{ const set=new Set(); calendar.day.forEach(d=>set.add(d.date.slice(0,7))); return Array.from(set).sort(); };
     function monthByGroup(byGroup, yyyyMM){ const days=daysInMonth(yyyyMM); const out={}; Object.keys(byGroup).forEach(g=>{ const map=new Map(byGroup[g].map(d=>[d.date,d])); out[g]=days.map(x=> map.get(x.date) || {date:x.date,isSunday:x.isSunday,shift:'rest',isWorking:false,currentCycleType:1}); }); return out; }
@@ -833,7 +800,7 @@
       // Guardar la pestaña activa actual antes de renderizar
       const activeTab = currentTab();
       renderTab(activeTab, {calendar, byGroup});
-      wireDnD(); wireZoneButtons();
+      wireZoneButtons();
     }
 
     // === NUEVO: render de 3 meses consecutivos para vistas por grupo y por turno ===
@@ -880,7 +847,7 @@
 
       if (tab === 'manual') {
         wrap.innerHTML = renderManualCalendar();
-        wireManualDnD();
+        // wireManualDnD ya se configuró en init, no llamar aquí
       }
     }
 
@@ -903,12 +870,6 @@
       document.querySelectorAll('.tab-btn-manual').forEach(b => b.classList.remove('bg-white/60'));
       const activeBtn = document.querySelector(`.tab-btn-manual[data-tab="${tab}"]`);
       if (activeBtn) activeBtn.classList.add('bg-white/60');
-
-      if (tab === 'calendar') {
-        wrap.innerHTML = renderManualCalendarGrid();
-        wireManualCalendarClicks();
-        updateAssignedDaysCounter();
-      }
 
       if (tab === 'by-group') {
         // Vista por grupos interactiva para modo manual
@@ -1151,113 +1112,6 @@
       });
     }
 
-    // Renderizar calendario interactivo para asignación manual
-    function renderManualCalendarGrid() {
-      const start = new Date(state.startDate);
-      const end = new Date(state.endDate);
-
-      let html = '<div class="space-y-4">';
-      html += '<div class="text-center mb-4"><h3 class="text-xl font-bold">Calendario de Asignación Manual</h3><p class="text-sm text-slate-600">Haz clic en cada día para asignarle el turno seleccionado</p></div>';
-
-      // Agrupar por mes
-      let currentMonth = '';
-      let currentDate = new Date(start);
-      let daysHtml = '';
-      let monthDays = [];
-
-      while (currentDate <= end) {
-        const dateStr = currentDate.toISOString().slice(0, 10);
-        const monthStr = currentDate.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
-
-        if (monthStr !== currentMonth) {
-          // Renderizar mes anterior si existe
-          if (currentMonth) {
-            html += renderMonthGrid(currentMonth, monthDays);
-            monthDays = [];
-          }
-          currentMonth = monthStr;
-        }
-
-        const dayOfWeek = currentDate.getDay();
-        const isSunday = dayOfWeek === 0;
-        const dayName = currentDate.toLocaleDateString('es-CL', { weekday: 'short' });
-        const dayNum = currentDate.getDate();
-
-        const assignedShift = state.manualDays[dateStr] || null;
-
-        monthDays.push({
-          date: dateStr,
-          dayNum: dayNum,
-          dayName: dayName,
-          isSunday: isSunday,
-          shift: assignedShift
-        });
-
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Renderizar último mes
-      if (monthDays.length > 0) {
-        html += renderMonthGrid(currentMonth, monthDays);
-      }
-
-      html += '</div>';
-
-      // Actualizar contador
-      const totalDays = Object.keys(state.manualDays).length;
-      setTimeout(() => {
-        const elem = document.getElementById('totalAssignedDays');
-        if (elem) elem.textContent = totalDays;
-      }, 100);
-
-      return html;
-    }
-
-    function renderMonthGrid(monthName, days) {
-      let html = `
-        <div class="glass rounded-2xl p-4">
-          <h4 class="text-lg font-bold mb-3 capitalize">${monthName}</h4>
-          <div class="grid grid-cols-7 gap-2">
-      `;
-
-      days.forEach(day => {
-        const shiftClass = getShiftClass(day.shift);
-        const shiftLabel = getShiftLabel(day.shift);
-        const sundayClass = day.isSunday ? 'ring-2 ring-red-400' : '';
-
-        html += `
-          <button
-            class="manual-day-cell p-3 rounded-xl border-2 transition-all hover:scale-105 ${shiftClass} ${sundayClass}"
-            data-date="${day.date}"
-            onclick="assignManualDay('${day.date}')"
-          >
-            <div class="text-xs text-slate-600 font-semibold">${day.dayName}</div>
-            <div class="text-lg font-bold">${day.dayNum}</div>
-            <div class="text-xs font-semibold mt-1">${shiftLabel}</div>
-          </button>
-        `;
-      });
-
-      html += '</div></div>';
-      return html;
-    }
-
-    function getShiftClass(shift) {
-      if (!shift || shift === 'rest') return 'bg-green-50 border-green-300';
-      if (shift === 'day') return 'bg-amber-100 border-amber-500';
-      if (shift === 'afternoon') return 'bg-orange-100 border-orange-500';
-      if (shift === 'night') return 'bg-indigo-100 border-indigo-500';
-      return 'bg-white border-slate-300';
-    }
-
-    function getShiftLabel(shift) {
-      if (!shift) return '—';
-      if (shift === 'day') return '☀️ Día';
-      if (shift === 'afternoon') return '🌤️ Tarde';
-      if (shift === 'night') return '🌙 Noche';
-      if (shift === 'rest') return '🏖️ Desc';
-      return '—';
-    }
 
     // Seleccionar tipo de turno con bloque
     function selectShiftBlock(shiftType, blockType) {
@@ -1422,10 +1276,6 @@
     }
 
     // Conectar eventos de clic en el calendario
-    function wireManualCalendarClicks() {
-      // Los eventos ya están conectados via onclick en el HTML
-    }
-
     // ========== GESTIÓN DE GRUPOS ==========
 
     // Agregar nuevo grupo
@@ -1782,14 +1632,17 @@
 
           <!-- Herramientas rápidas -->
           <div class="glass rounded-2xl p-4">
-            <div class="flex flex-wrap gap-2 items-center justify-between">
-              <div class="flex gap-2">
-                <button onclick="clearManualCalendar()" class="px-4 py-2 bg-rose-500 text-white rounded-xl font-semibold hover:bg-rose-600">
-                  🗑️ Limpiar calendario
+            <div class="flex flex-wrap gap-2 items-center">
+              <button onclick="clearManualCalendar()" class="px-4 py-2 bg-rose-500 text-white rounded-xl font-semibold hover:bg-rose-600">
+                🗑️ Limpiar calendario
+              </button>
+              <div class="flex gap-2 ml-auto">
+                <button id="btnUndoManual" onclick="undo()" class="px-4 py-2 glass rounded-xl font-semibold hover:bg-white/60" title="Deshacer (Ctrl/⌘+Z)">
+                  ↩️ Deshacer
                 </button>
-              </div>
-              <div class="text-sm text-slate-600">
-                Total de días asignados: <strong id="totalAssignedDays">0</strong>
+                <button id="btnRedoManual" onclick="redo()" class="px-4 py-2 glass rounded-xl font-semibold hover:bg-white/60" title="Rehacer (Ctrl/⌘+Shift+Z)">
+                  ↪️ Rehacer
+                </button>
               </div>
             </div>
           </div>
@@ -1803,20 +1656,8 @@
         updateSelectedShiftLabel();
       }
 
-      // Actualizar contador de días
-      updateAssignedDaysCounter();
-
       // Renderizar tabs del modo manual
-      renderTabManual('calendar');
-    }
-
-    // Actualizar el contador de días asignados
-    function updateAssignedDaysCounter() {
-      const totalAssignedElem = document.getElementById('totalAssignedDays');
-      if (totalAssignedElem && state.manualDays) {
-        const totalDays = Object.keys(state.manualDays).length;
-        totalAssignedElem.textContent = totalDays;
-      }
+      renderTabManual('by-group');
     }
 
     function renderManualCalendar() {
@@ -2156,104 +1997,148 @@
       if(act==='r1'){ assignments[shift][idx].cycle1Repeat=parseInt(t.value||1); renderAll(); saveAuto(); return; }
     }
 
-    // Drag & Drop con feedback visual
+    // Drag & Drop con feedback visual - usando delegación de eventos
+    let dndWired = false; // Flag para evitar configurar listeners múltiples veces
     function wireDnD(){
+      if(dndWired) return; // Ya configurado, no hacer nada
+      dndWired = true;
+
       let dragged=null;
+      let touchItem = null;
 
-      document.querySelectorAll('[draggable="true"]').forEach(el=>{
-        el.addEventListener('dragstart', (e)=>{
-          dragged={ groupId: el.dataset.group, cycle: el.dataset.cycle };
-          el.classList.add('dragging');
-        });
-
-        el.addEventListener('dragend', ()=>{
-          el.classList.remove('dragging');
-        });
+      // Usar delegación de eventos en el document para evitar agregar listeners múltiples
+      document.addEventListener('dragstart', (e)=>{
+        const el = e.target.closest('[draggable="true"]');
+        if(!el || !el.dataset.group) return;
+        dragged={ groupId: el.dataset.group, cycle: el.dataset.cycle };
+        el.classList.add('dragging');
       });
 
-      document.querySelectorAll('[data-drop-zone]').forEach(zone=>{
-        zone.addEventListener('dragover', e=> {
-          e.preventDefault();
-          zone.classList.add('drag-over');
-        });
+      document.addEventListener('dragend', (e)=>{
+        const el = e.target.closest('[draggable="true"]');
+        if(!el) return;
+        el.classList.remove('dragging');
+      });
 
-        zone.addEventListener('dragleave', ()=> {
+      document.addEventListener('dragover', (e)=> {
+        const zone = e.target.closest('[data-drop-zone]');
+        if(!zone) return;
+        e.preventDefault();
+        zone.classList.add('drag-over');
+      });
+
+      document.addEventListener('dragleave', (e)=> {
+        const zone = e.target.closest('[data-drop-zone]');
+        if(!zone) return;
+        // Solo remover si realmente salimos de la zona
+        if(!zone.contains(e.relatedTarget)) {
           zone.classList.remove('drag-over');
-        });
+        }
+      });
 
-        zone.addEventListener('drop', e=>{
-          e.preventDefault();
-          zone.classList.remove('drag-over');
+      document.addEventListener('drop', (e)=>{
+        const zone = e.target.closest('[data-drop-zone]');
+        if(!zone) return;
+        e.preventDefault();
+        zone.classList.remove('drag-over');
 
-          if(!dragged) return;
-          const key=zone.dataset.dropZone;
+        if(!dragged) return;
+        const key=zone.dataset.dropZone;
+        // Usar asignaciones manuales o automáticas según el modo
+        const list = state.manualMode ? state.manualAssignments[key] : state.shiftAssignments[key];
+
+        if(list.length>=state.maxGroupsPerShift) {
+          toast('⚠️ Este turno ya alcanzó el máximo de grupos', 'error');
+          return;
+        }
+
+        if(list.some(a=> a.groupId===dragged.groupId)) {
+          toast('⚠️ Este grupo ya está asignado a este turno', 'error');
+          return;
+        }
+
+        pushHistory();
+        list.push({ groupId: dragged.groupId, cycle1: dragged.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 });
+        dragged=null;
+        renderAll();
+        saveAuto();
+        toast('✅ Grupo asignado exitosamente', 'success');
+      });
+
+      // Touch support para mobile
+      document.addEventListener('touchstart', (e) => {
+        const el = e.target.closest('[draggable="true"]');
+        if(!el || !el.dataset.group) return;
+        touchItem = { groupId: el.dataset.group, cycle: el.dataset.cycle, element: el };
+        el.classList.add('dragging');
+      });
+
+      document.addEventListener('touchend', (e) => {
+        const el = e.target.closest('[draggable="true"]');
+        if(el) el.classList.remove('dragging');
+
+        if(!touchItem) return;
+
+        const touch = e.changedTouches[0];
+        const dropZone = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-drop-zone]');
+
+        if (dropZone) {
+          const key = dropZone.dataset.dropZone;
           // Usar asignaciones manuales o automáticas según el modo
           const list = state.manualMode ? state.manualAssignments[key] : state.shiftAssignments[key];
 
-          if(list.length>=state.maxGroupsPerShift) {
+          if(list.length >= state.maxGroupsPerShift) {
             toast('⚠️ Este turno ya alcanzó el máximo de grupos', 'error');
+            touchItem = null;
             return;
           }
 
-          if(list.some(a=> a.groupId===dragged.groupId)) {
+          if(list.some(a => a.groupId === touchItem.groupId)) {
             toast('⚠️ Este grupo ya está asignado a este turno', 'error');
+            touchItem = null;
             return;
           }
 
           pushHistory();
-          list.push({ groupId: dragged.groupId, cycle1: dragged.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 });
-          dragged=null;
+          list.push({ groupId: touchItem.groupId, cycle1: touchItem.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 });
           renderAll();
           saveAuto();
           toast('✅ Grupo asignado exitosamente', 'success');
-        });
-      });
+        }
 
-      // Touch support para mobile
-      let touchItem = null;
-      document.querySelectorAll('[draggable="true"]').forEach(el => {
-        el.addEventListener('touchstart', (e) => {
-          touchItem = { groupId: el.dataset.group, cycle: el.dataset.cycle, element: el };
-          el.classList.add('dragging');
-        });
-
-        el.addEventListener('touchend', (e) => {
-          el.classList.remove('dragging');
-          const touch = e.changedTouches[0];
-          const dropZone = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-drop-zone]');
-
-          if (dropZone && touchItem) {
-            const key = dropZone.dataset.dropZone;
-            // Usar asignaciones manuales o automáticas según el modo
-            const list = state.manualMode ? state.manualAssignments[key] : state.shiftAssignments[key];
-
-            if(list.length >= state.maxGroupsPerShift) {
-              toast('⚠️ Este turno ya alcanzó el máximo de grupos', 'error');
-              touchItem = null;
-              return;
-            }
-
-            if(list.some(a => a.groupId === touchItem.groupId)) {
-              toast('⚠️ Este grupo ya está asignado a este turno', 'error');
-              touchItem = null;
-              return;
-            }
-
-            pushHistory();
-            list.push({ groupId: touchItem.groupId, cycle1: touchItem.cycle, cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 });
-            renderAll();
-            saveAuto();
-            toast('✅ Grupo asignado exitosamente', 'success');
-          }
-
-          touchItem = null;
-        });
+        touchItem = null;
       });
     }
 
     // Undo/Redo impl
-    const undo=()=>{ if(!undoStack.length) return; const prev=undoStack.pop(); redoStack.push(clone(state)); state=prev; renderAll(); saveAuto(); toast('↩️ Cambio deshecho', 'info'); };
-    const redo=()=>{ if(!redoStack.length) return; const next=redoStack.pop(); undoStack.push(clone(state)); state=next; renderAll(); saveAuto(); toast('↪️ Cambio rehecho', 'info'); };
+    const undo=()=>{
+      if(!undoStack.length) return;
+      const prev=undoStack.pop();
+      redoStack.push(clone(state));
+      state=prev;
+      renderAll();
+      // Actualizar vista del modo manual si estamos en ese modo
+      if(state.manualMode) {
+        const currentTabManual = document.querySelector('.tab-btn-manual.bg-white\\/60')?.dataset.tab || 'by-group';
+        renderTabManual(currentTabManual);
+      }
+      saveAuto();
+      toast('↩️ Cambio deshecho', 'info');
+    };
+    const redo=()=>{
+      if(!redoStack.length) return;
+      const next=redoStack.pop();
+      undoStack.push(clone(state));
+      state=next;
+      renderAll();
+      // Actualizar vista del modo manual si estamos en ese modo
+      if(state.manualMode) {
+        const currentTabManual = document.querySelector('.tab-btn-manual.bg-white\\/60')?.dataset.tab || 'by-group';
+        renderTabManual(currentTabManual);
+      }
+      saveAuto();
+      toast('↪️ Cambio rehecho', 'info');
+    };
 
     const toast=(msg, type='success')=>{
       const el=document.createElement('div');
@@ -2474,163 +2359,183 @@
     }
 
     // ---------- MANUAL CALENDAR DRAG & DROP ----------
+    let manualDndWired = false; // Flag para evitar configurar listeners múltiples veces
     function wireManualDnD() {
+      if(manualDndWired) return; // Ya configurado, no hacer nada
+      manualDndWired = true;
+
       let draggedItem = null;
 
-      // Fichas de grupos arrastrables
-      document.querySelectorAll('.draggable-item').forEach(chip => {
-        chip.addEventListener('dragstart', (e) => {
-          draggedItem = {
-            groupId: chip.dataset.group,
-            cycle: chip.dataset.cycle
-          };
-          chip.classList.add('dragging');
-        });
+      // Usar delegación de eventos para elementos arrastrables
+      document.addEventListener('dragstart', (e) => {
+        const chip = e.target.closest('.draggable-item');
+        if(!chip) return;
+        draggedItem = {
+          groupId: chip.dataset.group,
+          cycle: chip.dataset.cycle
+        };
+        chip.classList.add('dragging');
+      });
 
-        chip.addEventListener('dragend', () => {
-          chip.classList.remove('dragging');
-        });
+      document.addEventListener('dragend', (e) => {
+        const chip = e.target.closest('.draggable-item');
+        if(!chip) return;
+        chip.classList.remove('dragging');
       });
 
       // Zonas de drop automáticas (DÍA, TARDE, NOCHE) - Para el tab manual del modo automático
-      document.querySelectorAll('.drop-zone').forEach(zone => {
-        zone.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          zone.classList.add('drag-over');
-        });
+      document.addEventListener('dragover', (e) => {
+        const zone = e.target.closest('.drop-zone');
+        if(!zone) return;
+        e.preventDefault();
+        zone.classList.add('drag-over');
+      });
 
-        zone.addEventListener('dragleave', () => {
+      document.addEventListener('dragleave', (e) => {
+        const zone = e.target.closest('.drop-zone');
+        if(!zone) return;
+        if(!zone.contains(e.relatedTarget)) {
           zone.classList.remove('drag-over');
-        });
+        }
+      });
 
-        zone.addEventListener('drop', (e) => {
-          e.preventDefault();
-          zone.classList.remove('drag-over');
+      document.addEventListener('drop', (e) => {
+        const zone = e.target.closest('.drop-zone');
+        if(!zone) return;
+        e.preventDefault();
+        zone.classList.remove('drag-over');
 
-          if (draggedItem) {
-            const shift = zone.dataset.shift;
-            const { groupId, cycle } = draggedItem;
+        if (draggedItem) {
+          const shift = zone.dataset.shift;
+          const { groupId, cycle } = draggedItem;
 
-            // Verificar si el grupo ya está asignado a este turno
-            const list = state.shiftAssignments[shift] || [];
-            if (list.some(a => a.groupId === groupId)) {
-              toast(`⚠️ El grupo G${groupId} ya está asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'error');
-              draggedItem = null;
-              return;
-            }
-
-            // Verificar límite de grupos por turno
-            if (list.length >= state.maxGroupsPerShift) {
-              toast(`⚠️ Ya hay ${state.maxGroupsPerShift} grupos asignados a este turno`, 'error');
-              draggedItem = null;
-              return;
-            }
-
-            // Agregar asignación
-            pushHistory();
-            if (!state.shiftAssignments[shift]) {
-              state.shiftAssignments[shift] = [];
-            }
-            state.shiftAssignments[shift].push({
-              groupId: groupId,
-              cycle1: cycle,
-              cycle2: null,
-              cycle1Repeat: 1,
-              cycle2Repeat: 1,
-              startOffset: 0
-            });
-
-            renderTab('manual');
-            renderAll();
-            saveAuto();
-            toast(`✅ G${groupId} (${cycle}) asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'success');
+          // Verificar si el grupo ya está asignado a este turno
+          const list = state.shiftAssignments[shift] || [];
+          if (list.some(a => a.groupId === groupId)) {
+            toast(`⚠️ El grupo G${groupId} ya está asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'error');
             draggedItem = null;
+            return;
           }
-        });
+
+          // Verificar límite de grupos por turno
+          if (list.length >= state.maxGroupsPerShift) {
+            toast(`⚠️ Ya hay ${state.maxGroupsPerShift} grupos asignados a este turno`, 'error');
+            draggedItem = null;
+            return;
+          }
+
+          // Agregar asignación
+          pushHistory();
+          if (!state.shiftAssignments[shift]) {
+            state.shiftAssignments[shift] = [];
+          }
+          state.shiftAssignments[shift].push({
+            groupId: groupId,
+            cycle1: cycle,
+            cycle2: null,
+            cycle1Repeat: 1,
+            cycle2Repeat: 1,
+            startOffset: 0
+          });
+
+          renderTab('manual');
+          renderAll();
+          saveAuto();
+          toast(`✅ G${groupId} (${cycle}) asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'success');
+          draggedItem = null;
+        }
       });
 
       // Zonas de drop manuales (DÍA, TARDE, NOCHE) - Para la sección del modo manual
-      document.querySelectorAll('.drop-zone-manual').forEach(zone => {
-        zone.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          zone.classList.add('drag-over');
-        });
-
-        zone.addEventListener('dragleave', () => {
-          zone.classList.remove('drag-over');
-        });
-
-        zone.addEventListener('drop', (e) => {
-          e.preventDefault();
-          zone.classList.remove('drag-over');
-
-          if (draggedItem) {
-            const shift = zone.dataset.shift;
-            const { groupId, cycle } = draggedItem;
-
-            // Verificar si el grupo ya está asignado a este turno
-            const list = state.manualAssignments[shift] || [];
-            if (list.some(a => a.groupId === groupId)) {
-              toast(`⚠️ El grupo G${groupId} ya está asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'error');
-              draggedItem = null;
-              return;
-            }
-
-            // Verificar límite de grupos por turno
-            if (list.length >= state.maxGroupsPerShift) {
-              toast(`⚠️ Ya hay ${state.maxGroupsPerShift} grupos asignados a este turno`, 'error');
-              draggedItem = null;
-              return;
-            }
-
-            // Agregar asignación
-            pushHistory();
-            if (!state.manualAssignments[shift]) {
-              state.manualAssignments[shift] = [];
-            }
-            state.manualAssignments[shift].push({
-              groupId: groupId,
-              cycle1: cycle,
-              cycle2: null,
-              cycle1Repeat: 1,
-              cycle2Repeat: 1,
-              startOffset: 0
-            });
-
-            renderManualInterface();
-            saveAuto();
-            toast(`✅ G${groupId} (${cycle}) asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'success');
-            draggedItem = null;
-          }
-        });
+      // Usar eventos separados para .drop-zone-manual usando closest específico
+      document.addEventListener('dragover', (e) => {
+        const zone = e.target.closest('.drop-zone-manual');
+        if(!zone) return;
+        e.preventDefault();
+        zone.classList.add('drag-over');
       });
 
-      // Botones de eliminar
-      document.querySelectorAll('[data-action="del-manual"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const shift = btn.dataset.shift;
-          const idx = parseInt(btn.dataset.idx);
+      document.addEventListener('dragleave', (e) => {
+        const zone = e.target.closest('.drop-zone-manual');
+        if(!zone) return;
+        if(!zone.contains(e.relatedTarget)) {
+          zone.classList.remove('drag-over');
+        }
+      });
 
-          // Determinar si estamos en modo manual o automático
-          const isManualSection = document.getElementById('sectionManual').style.display !== 'none';
-          const assignments = isManualSection ? state.manualAssignments : state.shiftAssignments;
-          const assignment = assignments[shift][idx];
+      document.addEventListener('drop', (e) => {
+        const zone = e.target.closest('.drop-zone-manual');
+        if(!zone) return;
+        e.preventDefault();
+        zone.classList.remove('drag-over');
 
-          if (confirm(`¿Eliminar G${assignment.groupId} de ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}?`)) {
-            pushHistory();
-            assignments[shift].splice(idx, 1);
+        if (draggedItem) {
+          const shift = zone.dataset.shift;
+          const { groupId, cycle } = draggedItem;
 
-            if (isManualSection) {
-              renderManualInterface();
-            } else {
-              renderTab('manual');
-              renderAll();
-            }
-
-            saveAuto();
-            toast('🗑️ Grupo eliminado', 'info');
+          // Verificar si el grupo ya está asignado a este turno
+          const list = state.manualAssignments[shift] || [];
+          if (list.some(a => a.groupId === groupId)) {
+            toast(`⚠️ El grupo G${groupId} ya está asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'error');
+            draggedItem = null;
+            return;
           }
-        });
+
+          // Verificar límite de grupos por turno
+          if (list.length >= state.maxGroupsPerShift) {
+            toast(`⚠️ Ya hay ${state.maxGroupsPerShift} grupos asignados a este turno`, 'error');
+            draggedItem = null;
+            return;
+          }
+
+          // Agregar asignación
+          pushHistory();
+          if (!state.manualAssignments[shift]) {
+            state.manualAssignments[shift] = [];
+          }
+          state.manualAssignments[shift].push({
+            groupId: groupId,
+            cycle1: cycle,
+            cycle2: null,
+            cycle1Repeat: 1,
+            cycle2Repeat: 1,
+            startOffset: 0
+          });
+
+          renderManualInterface();
+          saveAuto();
+          toast(`✅ G${groupId} (${cycle}) asignado a ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}`, 'success');
+          draggedItem = null;
+        }
+      });
+
+      // Botones de eliminar usando delegación
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="del-manual"]');
+        if(!btn) return;
+
+        const shift = btn.dataset.shift;
+        const idx = parseInt(btn.dataset.idx);
+
+        // Determinar si estamos en modo manual o automático
+        const isManualSection = document.getElementById('sectionManual').style.display !== 'none';
+        const assignments = isManualSection ? state.manualAssignments : state.shiftAssignments;
+        const assignment = assignments[shift][idx];
+
+        if (confirm(`¿Eliminar G${assignment.groupId} de ${shift === 'day' ? 'DÍA' : shift === 'afternoon' ? 'TARDE' : 'NOCHE'}?`)) {
+          pushHistory();
+          assignments[shift].splice(idx, 1);
+
+          if (isManualSection) {
+            renderManualInterface();
+          } else {
+            renderTab('manual');
+            renderAll();
+          }
+
+          saveAuto();
+          toast('🗑️ Grupo eliminado', 'info');
+        }
       });
     }
 
@@ -2783,6 +2688,8 @@
       }
 
       wireBasics();
+      wireDnD(); // Configurar drag & drop una sola vez
+      wireManualDnD(); // Configurar drag & drop manual una sola vez
       updateModeUI(); // Actualizar UI del modo
       renderAll();
       renderTab('by-group'); // Mostrar pestaña por defecto
