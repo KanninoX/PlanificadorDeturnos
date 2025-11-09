@@ -565,6 +565,16 @@
       selectedMonth: null, // se sincroniza con startDate en init y en cambios
       maxGroupsPerShift: 4,
       groups: ['1','2','3','4','A2','B2','C2','D2'],
+      groupNames: {
+        '1': 'Grupo 1',
+        '2': 'Grupo 2',
+        '3': 'Grupo 3',
+        '4': 'Grupo 4',
+        'A2': 'Grupo A2',
+        'B2': 'Grupo B2',
+        'C2': 'Grupo C2',
+        'D2': 'Grupo D2'
+      },
       shiftAssignments: {
         day:       [{ groupId: '1', cycle1: '6x1', cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 }],
         afternoon: [{ groupId: '2', cycle1: '6x1', cycle2: null, cycle1Repeat: 1, cycle2Repeat: 1, startOffset: 0 }],
@@ -573,6 +583,8 @@
       rules: { minFreeSundaysPerMonth: 2, maxConsecutiveWorkDays: 6 },
       manualMode: false, // true = modo manual, false = modo automático
       selectedShiftType: null, // Tipo de turno seleccionado en modo manual: 'day', 'afternoon', 'night', 'rest'
+      selectedGroupId: null, // ID del grupo seleccionado para asignar turnos
+      manualDaysByGroup: {}, // { 'groupId': { 'YYYY-MM-DD': 'day' | 'afternoon' | 'night' | 'rest' } }
       manualAssignments: {
         day:       [],
         afternoon: [],
@@ -598,7 +610,12 @@
     const daysInMonth = (yyyyMM)=>{ const [y,m] = yyyyMM.split('-').map(Number); const count=new Date(y,m,0).getDate(); const arr=[]; for(let d=1; d<=count; d++){ const iso=`${yyyyMM}-${String(d).padStart(2,'0')}`; const dt=new Date(iso); arr.push({date:iso, js:dt, isSunday: dt.getDay()===0}); } return arr; };
 
     function buildEngine(){
-      const start=new Date(state.startDate), end=new Date(state.endDate);
+      // Parsear fechas evitando problemas de zona horaria
+      const [startY, startM, startD] = state.startDate.split('-').map(Number);
+      const [endY, endM, endD] = state.endDate.split('-').map(Number);
+      const start = new Date(startY, startM - 1, startD);
+      const end = new Date(endY, endM - 1, endD);
+
       const calendar={ day:[], afternoon:[], night:[] }; const byGroup={}; const engine={};
       ['day','afternoon','night'].forEach(shift=>{
         state.shiftAssignments[shift].forEach(a=>{
@@ -609,8 +626,13 @@
           }
         });
       });
-      for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
-        const dateStr = t.toISOString().slice(0,10); const isSunday = t.getDay()===0;
+      const currentDate = new Date(start);
+      while(currentDate <= end){
+        const y = currentDate.getFullYear();
+        const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const d = String(currentDate.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+        const isSunday = currentDate.getDay()===0;
         const row = { day:{date:dateStr,isSunday,groups:[]}, afternoon:{date:dateStr,isSunday,groups:[]}, night:{date:dateStr,isSunday,groups:[]} };
         Object.keys(engine).forEach(g=>{
           const e=engine[g]; const workDays=e.cycleType===1?e.c1Work:e.c2Work; const span=e.cycleType===1?e.c1Span:e.c2Span; const isWork=e.cycleDay<workDays;
@@ -619,19 +641,33 @@
           e.cycleDay++; if(e.cycleDay>=span){ e.cycleDay=0; e.reps++; if(e.cycle2){ e.cycleType = e.cycleType===1?2:1; e.reps=0; } e.shift = e.shift==='day'? 'afternoon' : e.shift==='afternoon'? 'night' : 'day'; }
         });
         calendar.day.push(row.day); calendar.afternoon.push(row.afternoon); calendar.night.push(row.night);
+        currentDate.setDate(currentDate.getDate()+1);
       }
       return {calendar, byGroup};
     }
 
     function buildManualCalendar(){
-      const start=new Date(state.startDate), end=new Date(state.endDate);
+      // Parsear fechas evitando problemas de zona horaria
+      const [startY, startM, startD] = state.startDate.split('-').map(Number);
+      const [endY, endM, endD] = state.endDate.split('-').map(Number);
+      const start = new Date(startY, startM - 1, startD);
+      const end = new Date(endY, endM - 1, endD);
+
       const calendar={ day:[], afternoon:[], night:[] };
 
-      // Generar calendario día por día usando manualDays
-      for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
-        const dateStr = t.toISOString().slice(0,10);
-        const isSunday = t.getDay()===0;
-        const assignedShift = state.manualDays[dateStr] || 'rest';
+      // Asegurarse de que manualDaysByGroup existe
+      if (!state.manualDaysByGroup) {
+        state.manualDaysByGroup = {};
+      }
+
+      // Generar calendario día por día usando manualDaysByGroup
+      const currentDate1 = new Date(start);
+      while(currentDate1 <= end){
+        const y = currentDate1.getFullYear();
+        const m = String(currentDate1.getMonth() + 1).padStart(2, '0');
+        const d = String(currentDate1.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+        const isSunday = currentDate1.getDay()===0;
 
         const row = {
           day:{date:dateStr,isSunday,groups:[]},
@@ -639,35 +675,56 @@
           night:{date:dateStr,isSunday,groups:[]}
         };
 
-        // Si el día tiene un turno asignado, agregar un grupo genérico
-        if(assignedShift !== 'rest'){
-          row[assignedShift].groups.push({
-            groupId:'MANUAL',
-            isWorking:true,
-            currentCycleType:1
-          });
-        }
+        // Para cada grupo, verificar si tiene un turno asignado ese día
+        state.groups.forEach(groupId => {
+          const groupDays = state.manualDaysByGroup[groupId] || {};
+          const assignedShift = groupDays[dateStr] || 'rest';
+
+          if(assignedShift !== 'rest'){
+            row[assignedShift].groups.push({
+              groupId: groupId,
+              isWorking:true,
+              currentCycleType:1
+            });
+          }
+        });
 
         calendar.day.push(row.day);
         calendar.afternoon.push(row.afternoon);
         calendar.night.push(row.night);
+
+        currentDate1.setDate(currentDate1.getDate()+1);
       }
 
-      // Para byGroup, crear un solo grupo "MANUAL" que muestra todos los días asignados
-      const byGroup = { 'MANUAL': [] };
-      for(let t=new Date(start); t<=end; t.setDate(t.getDate()+1)){
-        const dateStr = t.toISOString().slice(0,10);
-        const isSunday = t.getDay()===0;
-        const assignedShift = state.manualDays[dateStr] || 'rest';
+      // Para byGroup, crear datos para cada grupo con sus turnos específicos
+      const byGroup = {};
 
-        byGroup['MANUAL'].push({
-          date:dateStr,
-          isSunday,
-          isWorking: assignedShift !== 'rest',
-          shift: assignedShift,
-          currentCycleType:1
-        });
-      }
+      // Inicializar cada grupo con sus propios turnos
+      state.groups.forEach(groupId => {
+        byGroup[groupId] = [];
+        const groupDays = state.manualDaysByGroup[groupId] || {};
+
+        // Crear una nueva copia de la fecha de inicio para cada grupo
+        const currentDate2 = new Date(start);
+        while(currentDate2 <= end){
+          const y = currentDate2.getFullYear();
+          const m = String(currentDate2.getMonth() + 1).padStart(2, '0');
+          const d = String(currentDate2.getDate()).padStart(2, '0');
+          const dateStr = `${y}-${m}-${d}`;
+          const isSunday = currentDate2.getDay()===0;
+          const assignedShift = groupDays[dateStr] || 'rest';
+
+          byGroup[groupId].push({
+            date:dateStr,
+            isSunday,
+            isWorking: assignedShift !== 'rest',
+            shift: assignedShift,
+            currentCycleType:1
+          });
+
+          currentDate2.setDate(currentDate2.getDate()+1);
+        }
+      });
 
       return {calendar, byGroup};
     }
@@ -725,7 +782,7 @@
       const pal = document.getElementById('groupsPalette');
       pal.innerHTML = state.groups.map(g=>{
         return `<div class="space-y-2">
-          <div class="${groupColors[g]} rounded-xl p-2 text-center font-bold">G${g}</div>
+          <div class="${groupColors[g]} rounded-xl p-2 text-center font-bold">${getGroupDisplayName(g)}</div>
           ${['4x3','5x2','6x1'].map(c=>`<div draggable="true" data-group="${g}" data-cycle="${c}" class="draggable-item border-2 ${groupBorders[g]} bg-white rounded-xl p-2 text-center font-semibold text-xs" title="Arrastra al turno deseado">⋮⋮ ${c}</div>`).join('')}
         </div>`;
       }).join('');
@@ -787,9 +844,12 @@
 
       // Genera los próximos 3 meses
       const months = [];
+      const startYear = baseMonth.getFullYear();
+      const startMonth = baseMonth.getMonth();
       for (let i = 0; i < 3; i++) {
-        const m = new Date(baseMonth);
-        m.setMonth(baseMonth.getMonth() + i);
+        const year = startYear + Math.floor((startMonth + i) / 12);
+        const month = (startMonth + i) % 12;
+        const m = new Date(year, month, 1);
         months.push(m.toISOString().slice(0, 7));
       }
 
@@ -831,9 +891,12 @@
 
       // Genera los próximos 3 meses
       const months = [];
+      const startYear = baseMonth.getFullYear();
+      const startMonth = baseMonth.getMonth();
       for (let i = 0; i < 3; i++) {
-        const m = new Date(baseMonth);
-        m.setMonth(baseMonth.getMonth() + i);
+        const year = startYear + Math.floor((startMonth + i) / 12);
+        const month = (startMonth + i) % 12;
+        const m = new Date(year, month, 1);
         months.push(m.toISOString().slice(0, 7));
       }
 
@@ -844,6 +907,7 @@
       if (tab === 'calendar') {
         wrap.innerHTML = renderManualCalendarGrid();
         wireManualCalendarClicks();
+        updateAssignedDaysCounter();
       }
 
       if (tab === 'by-group') {
@@ -869,18 +933,21 @@
       if (typeof months === 'string') {
         const baseMonth = new Date(months + '-01');
         months = [];
+        const startYear = baseMonth.getFullYear();
+        const startMonth = baseMonth.getMonth();
         for (let i = 0; i < 3; i++) {
-          const m = new Date(baseMonth);
-          m.setMonth(baseMonth.getMonth() + i);
+          const year = startYear + Math.floor((startMonth + i) / 12);
+          const month = (startMonth + i) % 12;
+          const m = new Date(year, month, 1);
           months.push(m.toISOString().slice(0, 7));
         }
       }
 
-      const groups = Object.keys(byGroup);
+      const groups = state.groups || [];
       if(groups.length === 0) {
         return `
           <div class="bg-amber-50 border-l-4 border-amber-400 p-4 text-center">
-            ⚠️ No hay grupos asignados. Usa el modo automático para asignar grupos con ciclos.
+            ⚠️ No hay grupos creados. Haz clic en el botón "+" para agregar grupos.
           </div>
           <div class="mt-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl">
             <p class="text-sm text-slate-700"><strong>💡 Nota:</strong> Esta vista muestra los turnos organizados por grupo usando el calendario manual que has creado día a día.</p>
@@ -898,14 +965,35 @@
       // Construir datos por grupo para todos los días
       const mg = {};
       groups.forEach(g => {
-        const map = new Map(byGroup[g].map(d => [d.date, d]));
-        mg[g] = allDays.map(x => map.get(x.date) || {date: x.date, isSunday: x.isSunday, shift: 'rest', isWorking: false, currentCycleType: 1});
+        if (byGroup[g]) {
+          const map = new Map(byGroup[g].map(d => [d.date, d]));
+          mg[g] = allDays.map(x => map.get(x.date) || {date: x.date, isSunday: x.isSunday, shift: 'rest', isWorking: false, currentCycleType: 1});
+        } else {
+          // Si el grupo no tiene datos en byGroup, crear días vacíos
+          mg[g] = allDays.map(x => ({date: x.date, isSunday: x.isSunday, shift: 'rest', isWorking: false, currentCycleType: 1}));
+        }
       });
 
       return `
       <div class="mb-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl">
-        <p class="text-sm text-slate-700"><strong>💡 Vista interactiva:</strong> Selecciona un turno arriba y haz clic en cualquier celda para asignarlo.</p>
-        <p class="text-xs text-slate-500 mt-2">Turno actual: <strong id="currentShiftLabel">Ninguno seleccionado</strong></p>
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex-1">
+            <p class="text-sm text-slate-700"><strong>💡 Vista interactiva:</strong> Selecciona un grupo y un turno, luego haz clic en cualquier celda para asignarlo.</p>
+            <div class="flex items-center gap-4 mt-2">
+              <div>
+                <span class="text-xs text-slate-500">Grupo actual: </span>
+                <strong id="currentGroupLabel" class="text-sm">Ninguno seleccionado</strong>
+              </div>
+              <div>
+                <span class="text-xs text-slate-500">Turno actual: </span>
+                <strong id="currentShiftLabel" class="text-sm">Ninguno seleccionado</strong>
+              </div>
+            </div>
+          </div>
+          <button onclick="addNewGroup()" class="bg-green-500 hover:bg-green-600 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold shadow-lg transition-all hover:scale-110" title="Agregar nuevo grupo">
+            +
+          </button>
+        </div>
       </div>
       <div class="scroll-hint">
         <span>➡️ Desliza horizontalmente para ver los ${allDays.length} días de ${months.length} meses</span>
@@ -914,7 +1002,10 @@
       <table class="border-collapse text-xs" style="width: auto; min-width: max-content;">
         <thead>
           <tr class="bg-slate-100">
-            <th class="sticky-left border p-2 font-bold bg-slate-100">Grupo</th>
+            <th class="sticky-left border p-2 font-bold bg-slate-100">
+              <div>Grupo</div>
+              <div class="text-[10px] text-slate-500 font-normal mt-1">(Clic para editar)</div>
+            </th>
             ${allDays.map(d => {
               const isFirst = d.js.getDate() === 1;
               const mon = d.js.toLocaleDateString('es-CL', {month: 'short'}).toUpperCase();
@@ -930,12 +1021,19 @@
           ${groups.map(g => `
             <tr>
               <td class="sticky-left border p-2 bg-white">
-                <div class="${groupColors[g]} rounded py-1 px-2 text-center text-sm font-bold">G${g}</div>
+                <div class="${groupColors[g] || 'bg-gray-500 text-white'} rounded py-2 px-2 text-center text-sm font-bold cursor-pointer hover:opacity-80 transition-all relative group ${state.selectedGroupId === g ? 'ring-4 ring-blue-500' : ''}" onclick="selectGroupForAssignment('${g}')" title="Clic para seleccionar grupo">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="flex-1">${getGroupDisplayName(g)}</span>
+                    <button onclick="event.stopPropagation(); showGroupMenu('${g}')" class="opacity-0 group-hover:opacity-100 text-white hover:text-red-200 text-xs font-bold" title="Menú del grupo">
+                      ⋮
+                    </button>
+                  </div>
+                </div>
               </td>
               ${mg[g].map(x => {
                 const cls = x.shift === 'day' ? 'shift-day' : x.shift === 'afternoon' ? 'shift-afternoon' : x.shift === 'night' ? 'shift-night' : 'shift-rest';
                 const label = x.shift === 'day' ? 'Día' : x.shift === 'afternoon' ? 'Tarde' : x.shift === 'night' ? 'Noche' : 'Descanso';
-                return `<td class="border p-1 text-center ${cls} relative cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all manual-group-cell" data-date="${x.date}" title="${label}">
+                return `<td class="border p-1 text-center ${cls} relative cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all manual-group-cell" data-date="${x.date}" data-group="${g}" title="${label}">
                   <div class="font-semibold text-[11px] py-1">${label}${x.currentCycleType === 2 ? '<span class="badge">C2</span>' : ''}</div>
                 </td>`;
               }).join('')}
@@ -946,10 +1044,76 @@
       </div>`;
     }
 
+    // Obtener nombre de grupo para mostrar
+    function getGroupDisplayName(groupId) {
+      return state.groupNames?.[groupId] || `Grupo ${groupId}`;
+    }
+
+    // Seleccionar grupo para asignación
+    function selectGroupForAssignment(groupId) {
+      state.selectedGroupId = groupId;
+      updateGroupLabel();
+      renderTabManual('by-group');
+    }
+
+    // Actualizar label del grupo seleccionado
+    function updateGroupLabel() {
+      const labelElem = document.getElementById('currentGroupLabel');
+      if (labelElem && state.selectedGroupId) {
+        labelElem.textContent = getGroupDisplayName(state.selectedGroupId);
+        labelElem.className = 'text-sm font-bold text-blue-600';
+      } else if (labelElem) {
+        labelElem.textContent = 'Ninguno seleccionado';
+        labelElem.className = 'text-sm font-bold text-slate-500';
+      }
+    }
+
+    // Mostrar menú de grupo
+    function showGroupMenu(groupId) {
+      const groupName = getGroupDisplayName(groupId);
+      const options = `
+        <div class="space-y-2">
+          <button onclick="editGroupName('${groupId}'); this.closest('.modal-overlay').remove();" class="w-full bg-blue-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-blue-600">
+            ✏️ Editar nombre
+          </button>
+          <button onclick="clearGroupCalendar('${groupId}'); this.closest('.modal-overlay').remove();" class="w-full bg-orange-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-orange-600">
+            🧹 Limpiar turnos del grupo
+          </button>
+          <button onclick="deleteGroup('${groupId}'); this.closest('.modal-overlay').remove();" class="w-full bg-red-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-red-600">
+            🗑️ Eliminar grupo
+          </button>
+          <button onclick="this.closest('.modal-overlay').remove();" class="w-full bg-gray-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-gray-600">
+            Cancelar
+          </button>
+        </div>
+      `;
+      showModal(`📋 ${groupName}`, options);
+    }
+
+    // Limpiar calendario de un grupo específico
+    function clearGroupCalendar(groupId) {
+      const groupName = getGroupDisplayName(groupId);
+
+      if (!confirm(`¿Estás seguro de que deseas limpiar todos los turnos de "${groupName}"?`)) {
+        return;
+      }
+
+      pushHistory();
+
+      // Limpiar solo los turnos de este grupo
+      if (state.manualDaysByGroup) {
+        state.manualDaysByGroup[groupId] = {};
+      }
+
+      saveAuto();
+      renderTabManual('by-group');
+      toast(`🧹 Turnos de "${groupName}" limpiados`, 'info');
+    }
+
     // Conectar clics en la vista por grupos
     function wireGroupViewClicks() {
-      // Actualizar label del turno seleccionado
-      const updateLabel = () => {
+      // Actualizar labels
+      const updateLabels = () => {
         const labels = {
           day: '☀️ DÍA',
           afternoon: '🌤️ TARDE',
@@ -959,20 +1123,26 @@
         const labelElem = document.getElementById('currentShiftLabel');
         if (labelElem && state.selectedShiftType) {
           labelElem.textContent = labels[state.selectedShiftType] || 'Ninguno seleccionado';
-          labelElem.className = 'font-bold text-lg text-blue-600';
+          labelElem.className = 'text-sm font-bold text-blue-600';
         } else if (labelElem) {
           labelElem.textContent = 'Ninguno seleccionado';
-          labelElem.className = 'font-bold text-lg text-slate-500';
+          labelElem.className = 'text-sm font-bold text-slate-500';
         }
+
+        updateGroupLabel();
       };
 
-      updateLabel();
+      updateLabels();
 
       // Agregar evento de clic a cada celda
       document.querySelectorAll('.manual-group-cell').forEach(cell => {
         cell.addEventListener('click', () => {
           const dateStr = cell.dataset.date;
-          if (dateStr) {
+          const groupId = cell.dataset.group;
+
+          if (dateStr && groupId) {
+            // Seleccionar el grupo automáticamente al hacer clic en su celda
+            state.selectedGroupId = groupId;
             assignManualDay(dateStr);
             // Recargar la vista por grupos después de asignar
             setTimeout(() => renderTabManual('by-group'), 100);
@@ -1089,21 +1259,16 @@
       return '—';
     }
 
-    // Seleccionar tipo de turno
-    function selectShiftType(shiftType) {
+    // Seleccionar tipo de turno con bloque
+    function selectShiftBlock(shiftType, blockType) {
       state.selectedShiftType = shiftType;
+      state.selectedBlockType = blockType;
 
-      // Actualizar UI
-      document.querySelectorAll('.shift-selector').forEach(btn => {
-        btn.classList.remove('ring-4', 'ring-blue-500', 'scale-105');
-      });
+      updateSelectedShiftLabel();
+    }
 
-      const selectedBtn = document.getElementById(`selectShift${shiftType.charAt(0).toUpperCase() + shiftType.slice(1)}`);
-      if (selectedBtn) {
-        selectedBtn.classList.add('ring-4', 'ring-blue-500', 'scale-105');
-      }
-
-      // Actualizar label
+    // Actualizar el label del turno seleccionado
+    function updateSelectedShiftLabel() {
       const labels = {
         day: '☀️ DÍA',
         afternoon: '🌤️ TARDE',
@@ -1112,42 +1277,147 @@
       };
 
       const labelElem = document.getElementById('selectedShiftLabel');
-      if (labelElem) {
-        labelElem.textContent = labels[shiftType] || 'Ninguno';
+      if (labelElem && state.selectedShiftType) {
+        let blockDesc = '';
+        if (state.selectedBlockType) {
+          // Si es un ciclo como 4x3, 5x2, etc.
+          if (state.selectedBlockType.includes('x')) {
+            blockDesc = ` (${state.selectedBlockType})`;
+          } else if (state.selectedBlockType === '6x') {
+            blockDesc = ' (6x)';
+          } else {
+            // Si es un número simple (1, 2, 3)
+            const num = parseInt(state.selectedBlockType);
+            blockDesc = num > 1 ? ` (${num} días)` : ' (1 día)';
+          }
+        }
+        labelElem.textContent = labels[state.selectedShiftType] + blockDesc || 'Ninguno';
       }
     }
 
-    // Asignar turno a un día específico
+    // Función antigua para compatibilidad
+    function selectShiftType(shiftType) {
+      selectShiftBlock(shiftType, '1');
+    }
+
+    // Asignar turno a un día específico (ahora con soporte para bloques y por grupo)
     function assignManualDay(dateStr) {
       if (!state.selectedShiftType) {
         toast('⚠️ Primero selecciona un tipo de turno', 'error');
         return;
       }
 
+      if (!state.selectedGroupId) {
+        toast('⚠️ Primero selecciona un grupo', 'error');
+        return;
+      }
+
       pushHistory();
 
-      // Si ya tiene el mismo turno, lo eliminamos (toggle)
-      if (state.manualDays[dateStr] === state.selectedShiftType) {
-        delete state.manualDays[dateStr];
-        toast('🗑️ Turno eliminado', 'info');
+      // Asegurarse de que manualDaysByGroup existe
+      if (!state.manualDaysByGroup) {
+        state.manualDaysByGroup = {};
+      }
+
+      // Asegurarse de que el grupo existe en manualDaysByGroup
+      if (!state.manualDaysByGroup[state.selectedGroupId]) {
+        state.manualDaysByGroup[state.selectedGroupId] = {};
+      }
+
+      const labels = { day: 'DÍA', afternoon: 'TARDE', night: 'NOCHE', rest: 'DESCANSO' };
+      const blockType = state.selectedBlockType || '1';
+      const groupDays = state.manualDaysByGroup[state.selectedGroupId];
+
+      // Verificar si es un ciclo (4x3, 5x2, 6x1, 6x)
+      if (blockType.includes('x')) {
+        let workDays, restDays;
+
+        if (blockType === '6x') {
+          workDays = 6;
+          restDays = 0;
+        } else {
+          const parts = blockType.split('x');
+          workDays = parseInt(parts[0]);
+          restDays = parseInt(parts[1]);
+        }
+
+        // Aplicar el ciclo desde la fecha seleccionada
+        // Usar Date con año, mes, día para evitar problemas de zona horaria
+        const [year, month, day] = dateStr.split('-').map(Number);
+        let currentDate = new Date(year, month - 1, day);
+        let daysAssigned = 0;
+
+        // Asignar días de trabajo
+        for (let i = 0; i < workDays; i++) {
+          const y = currentDate.getFullYear();
+          const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+          const d = String(currentDate.getDate()).padStart(2, '0');
+          const currentDateStr = `${y}-${m}-${d}`;
+
+          groupDays[currentDateStr] = state.selectedShiftType;
+          currentDate.setDate(currentDate.getDate() + 1);
+          daysAssigned++;
+        }
+
+        // Asignar días de descanso
+        for (let i = 0; i < restDays; i++) {
+          const y = currentDate.getFullYear();
+          const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+          const d = String(currentDate.getDate()).padStart(2, '0');
+          const currentDateStr = `${y}-${m}-${d}`;
+
+          groupDays[currentDateStr] = 'rest';
+          currentDate.setDate(currentDate.getDate() + 1);
+          daysAssigned++;
+        }
+
+        const groupName = getGroupDisplayName(state.selectedGroupId);
+        toast(`✅ ${groupName}: Ciclo ${blockType} aplicado (${workDays} ${labels[state.selectedShiftType]} + ${restDays} descansos)`, 'success');
+
       } else {
-        state.manualDays[dateStr] = state.selectedShiftType;
-        const labels = { day: 'DÍA', afternoon: 'TARDE', night: 'NOCHE', rest: 'DESCANSO' };
-        toast(`✅ ${labels[state.selectedShiftType]} asignado`, 'success');
+        // Es un número simple (1, 2, 3, etc.)
+        const numDays = parseInt(blockType);
+
+        // Usar Date con año, mes, día para evitar problemas de zona horaria
+        const [year, month, day] = dateStr.split('-').map(Number);
+        let currentDate = new Date(year, month - 1, day);
+
+        for (let i = 0; i < numDays; i++) {
+          const y = currentDate.getFullYear();
+          const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+          const d = String(currentDate.getDate()).padStart(2, '0');
+          const currentDateStr = `${y}-${m}-${d}`;
+
+          groupDays[currentDateStr] = state.selectedShiftType;
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        const dayWord = numDays === 1 ? 'día' : 'días';
+        const groupName = getGroupDisplayName(state.selectedGroupId);
+        toast(`✅ ${groupName}: ${numDays} ${dayWord} de ${labels[state.selectedShiftType]} asignados`, 'success');
       }
 
       saveAuto();
-      renderTabManual('calendar');
+      renderTabManual('by-group');
     }
 
     // Limpiar todo el calendario manual
     function clearManualCalendar() {
-      if (confirm('¿Estás seguro de que deseas limpiar todo el calendario manual?')) {
+      if (confirm('¿Estás seguro de que deseas limpiar todo el calendario manual de TODOS los grupos?\n\nEsta acción no se puede deshacer.')) {
         pushHistory();
+
+        // Limpiar ambas estructuras de datos
         state.manualDays = {};
+        state.manualDaysByGroup = {};
+
+        // Reinicializar manualDaysByGroup para todos los grupos
+        state.groups.forEach(groupId => {
+          state.manualDaysByGroup[groupId] = {};
+        });
+
         saveAuto();
-        renderTabManual('calendar');
-        toast('🗑️ Calendario limpiado', 'info');
+        renderTabManual('by-group');
+        toast('🗑️ Calendario de todos los grupos limpiado', 'info');
       }
     }
 
@@ -1156,93 +1426,126 @@
       // Los eventos ya están conectados via onclick en el HTML
     }
 
-    // Drag & Drop de ciclos
-    function wireCycleDragDrop() {
-      let draggedCycle = null;
+    // ========== GESTIÓN DE GRUPOS ==========
 
-      // Fichas de ciclos arrastrables
-      document.querySelectorAll('.cycle-chip').forEach(chip => {
-        chip.addEventListener('dragstart', (e) => {
-          draggedCycle = chip.dataset.cycle;
-          chip.classList.add('dragging');
-          chip.style.opacity = '0.5';
-        });
-
-        chip.addEventListener('dragend', () => {
-          chip.classList.remove('dragging');
-          chip.style.opacity = '1';
-        });
-      });
-
-      // Zonas drop para turnos
-      document.querySelectorAll('.cycle-drop-zone').forEach(zone => {
-        zone.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          zone.classList.add('ring-4', 'ring-blue-500', 'scale-105');
-        });
-
-        zone.addEventListener('dragleave', () => {
-          zone.classList.remove('ring-4', 'ring-blue-500', 'scale-105');
-        });
-
-        zone.addEventListener('drop', (e) => {
-          e.preventDefault();
-          zone.classList.remove('ring-4', 'ring-blue-500', 'scale-105');
-
-          if (draggedCycle) {
-            const shift = zone.dataset.shift;
-            applyCycleToCalendar(shift, draggedCycle);
-            draggedCycle = null;
-          }
-        });
-      });
-    }
-
-    // Aplicar un ciclo al calendario completo desde la fecha de inicio
-    function applyCycleToCalendar(shiftType, cycle) {
-      const [workDays, restDays] = cycle.split('x').map(Number);
-      const cycleDuration = workDays + restDays;
+    // Agregar nuevo grupo
+    function addNewGroup() {
+      const newGroupId = `G${Date.now().toString(36)}`; // ID único basado en timestamp
 
       pushHistory();
 
-      const start = new Date(state.startDate);
-      const end = new Date(state.endDate);
-      let currentDate = new Date(start);
-      let dayInCycle = 0;
+      // Agregar el grupo al array
+      state.groups.push(newGroupId);
 
-      const shiftLabels = { day: 'DÍA', afternoon: 'TARDE', night: 'NOCHE' };
-      let daysAssigned = 0;
+      // Inicializar groupNames si no existe
+      if (!state.groupNames) {
+        state.groupNames = {};
+      }
 
-      while (currentDate <= end) {
-        const dateStr = currentDate.toISOString().slice(0, 10);
+      // Asignar nombre por defecto
+      const groupNumber = state.groups.length;
+      state.groupNames[newGroupId] = `Grupo ${groupNumber}`;
 
-        // Determinar si es día de trabajo o descanso según el ciclo
-        if (dayInCycle < workDays) {
-          // Día de trabajo
-          state.manualDays[dateStr] = shiftType;
-          daysAssigned++;
-        } else {
-          // Día de descanso
-          state.manualDays[dateStr] = 'rest';
-        }
+      // Asignar un color aleatorio
+      const colors = [
+        'bg-purple-500 text-white',
+        'bg-pink-500 text-white',
+        'bg-blue-500 text-white',
+        'bg-green-500 text-white',
+        'bg-amber-500 text-white',
+        'bg-cyan-500 text-white',
+        'bg-rose-500 text-white',
+        'bg-teal-500 text-white',
+        'bg-indigo-500 text-white',
+        'bg-lime-500 text-white',
+        'bg-orange-500 text-white',
+        'bg-violet-500 text-white'
+      ];
 
-        dayInCycle = (dayInCycle + 1) % cycleDuration;
-        currentDate.setDate(currentDate.getDate() + 1);
+      if (!groupColors[newGroupId]) {
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        groupColors[newGroupId] = randomColor;
       }
 
       saveAuto();
-      renderTabManual('calendar');
-      toast(`✅ Ciclo ${cycle} aplicado a ${shiftLabels[shiftType]} (${daysAssigned} días asignados)`, 'success');
+      renderTabManual('by-group');
+      toast(`✅ Grupo "${state.groupNames[newGroupId]}" agregado`, 'success');
     }
+
+    // Editar nombre de grupo
+    function editGroupName(groupId) {
+      const currentName = state.groupNames?.[groupId] || `Grupo ${groupId}`;
+      const newName = prompt('Ingresa el nuevo nombre para el grupo:', currentName);
+
+      if (newName && newName.trim() !== '' && newName !== currentName) {
+        pushHistory();
+
+        // Inicializar groupNames si no existe
+        if (!state.groupNames) {
+          state.groupNames = {};
+        }
+
+        state.groupNames[groupId] = newName.trim();
+
+        saveAuto();
+        renderTabManual('by-group');
+        toast(`✅ Grupo renombrado a "${newName}"`, 'success');
+      }
+    }
+
+    // Eliminar grupo
+    function deleteGroup(groupId) {
+      const groupName = state.groupNames?.[groupId] || `Grupo ${groupId}`;
+
+      if (!confirm(`¿Estás seguro de que deseas eliminar el grupo "${groupName}"?\n\nSe eliminarán todos los turnos asignados a este grupo.`)) {
+        return;
+      }
+
+      pushHistory();
+
+      // Eliminar del array de grupos
+      state.groups = state.groups.filter(g => g !== groupId);
+
+      // Eliminar del objeto de nombres
+      if (state.groupNames) {
+        delete state.groupNames[groupId];
+      }
+
+      // Eliminar turnos manuales del grupo
+      if (state.manualDaysByGroup) {
+        delete state.manualDaysByGroup[groupId];
+      }
+
+      // Eliminar asignaciones en modo automático
+      Object.keys(state.shiftAssignments).forEach(shift => {
+        state.shiftAssignments[shift] = state.shiftAssignments[shift].filter(
+          assignment => assignment.groupId !== groupId
+        );
+      });
+
+      // Si el grupo eliminado era el seleccionado, limpiar la selección
+      if (state.selectedGroupId === groupId) {
+        state.selectedGroupId = null;
+      }
+
+      saveAuto();
+      renderTabManual('by-group');
+      toast(`🗑️ Grupo "${groupName}" eliminado`, 'info');
+    }
+
+    // ========== FIN GESTIÓN DE GRUPOS ==========
 
     function htmlByGroup(byGroup, months){
       // Si months es string (un solo mes), convertir a array de 3 meses
       if (typeof months === 'string') {
         const baseMonth = new Date(months + '-01');
         months = [];
+        const startYear = baseMonth.getFullYear();
+        const startMonth = baseMonth.getMonth();
         for (let i = 0; i < 3; i++) {
-          const m = new Date(baseMonth);
-          m.setMonth(baseMonth.getMonth() + i);
+          const year = startYear + Math.floor((startMonth + i) / 12);
+          const month = (startMonth + i) % 12;
+          const m = new Date(year, month, 1);
           months.push(m.toISOString().slice(0, 7));
         }
       }
@@ -1272,7 +1575,9 @@
       <table class="border-collapse text-xs" style="width: auto; min-width: max-content;">
         <thead>
           <tr class="bg-slate-100">
-            <th class="sticky-left border p-2 font-bold bg-slate-100">Grupo</th>
+            <th class="sticky-left border p-2 font-bold bg-slate-100">
+              <div>Grupo</div>
+            </th>
             ${allDays.map(d => {
               const isFirst = d.js.getDate() === 1;
               const mon = d.js.toLocaleDateString('es-CL', {month: 'short'}).toUpperCase();
@@ -1288,7 +1593,9 @@
           ${groups.map(g => `
             <tr>
               <td class="sticky-left border p-2 bg-white">
-                <div class="${groupColors[g]} rounded py-1 px-2 text-center text-sm font-bold">G${g}</div>
+                <div class="${groupColors[g] || 'bg-gray-500 text-white'} rounded py-2 px-2 text-center text-sm font-bold">
+                  ${getGroupDisplayName(g)}
+                </div>
               </td>
               ${mg[g].map(x => {
                 const cls = x.shift === 'day' ? 'shift-day' : x.shift === 'afternoon' ? 'shift-afternoon' : x.shift === 'night' ? 'shift-night' : 'shift-rest';
@@ -1310,9 +1617,12 @@
         const monthStr = typeof months === 'string' ? months : state.selectedMonth;
         const baseMonth = new Date(monthStr + '-01');
         const monthsArray = [];
+        const startYear = baseMonth.getFullYear();
+        const startMonth = baseMonth.getMonth();
         for (let i = 0; i < 3; i++) {
-          const m = new Date(baseMonth);
-          m.setMonth(baseMonth.getMonth() + i);
+          const year = startYear + Math.floor((startMonth + i) / 12);
+          const month = (startMonth + i) % 12;
+          const m = new Date(year, month, 1);
           monthsArray.push(m.toISOString().slice(0, 7));
         }
         months = monthsArray;
@@ -1385,13 +1695,13 @@
       <div class="grid gap-6">
         <div class="overflow-x-auto">
           <table class="w-full border-collapse text-xs">
-            <thead><tr class="bg-slate-100"><th class="border p-2 font-bold">Mes</th>${state.groups.map(g=>`<th class="border p-2 font-bold"><div class="${groupColors[g]} rounded py-1 px-2 inline-block text-xs">G${g}</div></th>`).join('')}</tr></thead>
+            <thead><tr class="bg-slate-100"><th class="border p-2 font-bold">Mes</th>${state.groups.map(g=>`<th class="border p-2 font-bold"><div class="${groupColors[g]} rounded py-1 px-2 inline-block text-xs">${getGroupDisplayName(g)}</div></th>`).join('')}</tr></thead>
             <tbody>${months.map((m,idx)=>`<tr class="${idx%2===0?'bg-white':'bg-slate-50'}"><td class="border p-2 font-semibold">${new Date(m+'-01').toLocaleDateString('es-CL',{month:'short',year:'numeric'})}</td>${state.groups.map(g=>{ const st=sundayStatsObj[m][g]; if(!st||st.total===0) return `<td class=\"border p-2 text-center\">-</td>`; const ok=st.free>=state.rules.minFreeSundaysPerMonth; return `<td class=\"border p-2 text-center ${ok?'bg-emerald-50':'bg-rose-50'}\"><div class=\"font-bold ${ok?'text-emerald-700':'text-rose-700'}\">${st.free}</div><div class=\"text-[10px] text-slate-600\">/${st.total}</div></td>`; }).join('')}</tr>`).join('')}</tbody>
           </table>
         </div>
       </div>`; }
 
-    function renderRules(s){ const issues=[]; Object.entries(s).forEach(([month,groups])=>{ Object.entries(groups).forEach(([g,st])=>{ if(st&&st.total>0&&st.free<state.rules.minFreeSundaysPerMonth){ issues.push({type:'Domingos',month,group:g,msg:`G${g} con ${st.free}/${st.total} domingos libres (< ${state.rules.minFreeSundaysPerMonth})`}); } }); }); const htmlIssues = issues.length? issues.map(i=>`<li class="p-2 rounded bg-rose-50 border border-rose-200">${new Date(i.month+'-01').toLocaleDateString('es-CL',{month:'long',year:'numeric'})}: <strong>${i.msg}</strong></li>`).join('') : '<li class="p-2 rounded bg-emerald-50 border border-emerald-200">Sin observaciones por ahora ✨</li>'; return `
+    function renderRules(s){ const issues=[]; Object.entries(s).forEach(([month,groups])=>{ Object.entries(groups).forEach(([g,st])=>{ if(st&&st.total>0&&st.free<state.rules.minFreeSundaysPerMonth){ issues.push({type:'Domingos',month,group:g,msg:`${getGroupDisplayName(g)} con ${st.free}/${st.total} domingos libres (< ${state.rules.minFreeSundaysPerMonth})`}); } }); }); const htmlIssues = issues.length? issues.map(i=>`<li class="p-2 rounded bg-rose-50 border border-rose-200">${new Date(i.month+'-01').toLocaleDateString('es-CL',{month:'long',year:'numeric'})}: <strong>${i.msg}</strong></li>`).join('') : '<li class="p-2 rounded bg-emerald-50 border border-emerald-200">Sin observaciones por ahora ✨</li>'; return `
       <div class="grid md:grid-cols-3 gap-6">
         <div class="md:col-span-2"><h3 class="text-lg font-bold mb-2">Alertas de reglas</h3><ul class="space-y-2">${htmlIssues}</ul></div>
         <div class="glass rounded-xl p-4"><h4 class="font-bold mb-2">Parámetros</h4>
@@ -1414,45 +1724,52 @@
             <h3 class="text-lg font-bold mb-4">1️⃣ Asignación día por día</h3>
             <p class="text-sm text-slate-600 mb-4">Selecciona un turno y haz clic en los días del calendario:</p>
             <div class="grid md:grid-cols-4 gap-4">
-              <button
-                id="selectShiftDay"
-                data-shift="day"
-                class="shift-selector p-6 rounded-xl border-4 transition-all cursor-pointer hover:scale-105 bg-amber-100 border-amber-500"
-                onclick="selectShiftType('day')"
-              >
-                <div class="text-4xl mb-2">☀️</div>
-                <div class="text-xl font-bold">DÍA</div>
-              </button>
+              <!-- Tarjeta DÍA -->
+              <div class="shift-card bg-amber-50 border-4 border-amber-500 rounded-xl p-4">
+                <div class="text-4xl mb-2 text-center">☀️</div>
+                <div class="text-xl font-bold text-center mb-3">DÍA</div>
+                <div class="space-y-2">
+                  <button onclick="selectShiftBlock('day', '4x3')" class="w-full bg-white border-2 border-amber-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-amber-100 transition-all">4x3</button>
+                  <button onclick="selectShiftBlock('day', '5x2')" class="w-full bg-white border-2 border-amber-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-amber-100 transition-all">5x2</button>
+                  <button onclick="selectShiftBlock('day', '6x1')" class="w-full bg-white border-2 border-amber-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-amber-100 transition-all">6x1</button>
+                  <button onclick="selectShiftBlock('day', '1')" class="w-full bg-amber-200 border-2 border-amber-500 rounded-lg py-1 px-2 text-sm font-bold hover:bg-amber-300 transition-all">Agregar 1 Día</button>
+                </div>
+              </div>
 
-              <button
-                id="selectShiftAfternoon"
-                data-shift="afternoon"
-                class="shift-selector p-6 rounded-xl border-4 transition-all cursor-pointer hover:scale-105 bg-orange-100 border-orange-500"
-                onclick="selectShiftType('afternoon')"
-              >
-                <div class="text-4xl mb-2">🌤️</div>
-                <div class="text-xl font-bold">TARDE</div>
-              </button>
+              <!-- Tarjeta TARDE -->
+              <div class="shift-card bg-orange-50 border-4 border-orange-500 rounded-xl p-4">
+                <div class="text-4xl mb-2 text-center">🌤️</div>
+                <div class="text-xl font-bold text-center mb-3">TARDE</div>
+                <div class="space-y-2">
+                  <button onclick="selectShiftBlock('afternoon', '4x3')" class="w-full bg-white border-2 border-orange-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-orange-100 transition-all">4x3</button>
+                  <button onclick="selectShiftBlock('afternoon', '5x2')" class="w-full bg-white border-2 border-orange-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-orange-100 transition-all">5x2</button>
+                  <button onclick="selectShiftBlock('afternoon', '6x')" class="w-full bg-white border-2 border-orange-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-orange-100 transition-all">6x</button>
+                  <button onclick="selectShiftBlock('afternoon', '1')" class="w-full bg-orange-200 border-2 border-orange-500 rounded-lg py-1 px-2 text-sm font-bold hover:bg-orange-300 transition-all">Agregar 1 Tarde</button>
+                </div>
+              </div>
 
-              <button
-                id="selectShiftNight"
-                data-shift="night"
-                class="shift-selector p-6 rounded-xl border-4 transition-all cursor-pointer hover:scale-105 bg-indigo-100 border-indigo-500"
-                onclick="selectShiftType('night')"
-              >
-                <div class="text-4xl mb-2">🌙</div>
-                <div class="text-xl font-bold">NOCHE</div>
-              </button>
+              <!-- Tarjeta NOCHE -->
+              <div class="shift-card bg-indigo-50 border-4 border-indigo-500 rounded-xl p-4">
+                <div class="text-4xl mb-2 text-center">🌙</div>
+                <div class="text-xl font-bold text-center mb-3">NOCHE</div>
+                <div class="space-y-2">
+                  <button onclick="selectShiftBlock('night', '4x3')" class="w-full bg-white border-2 border-indigo-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-indigo-100 transition-all">4x3</button>
+                  <button onclick="selectShiftBlock('night', '5x2')" class="w-full bg-white border-2 border-indigo-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-indigo-100 transition-all">5x2</button>
+                  <button onclick="selectShiftBlock('night', '6x1')" class="w-full bg-white border-2 border-indigo-400 rounded-lg py-1 px-2 text-sm font-semibold hover:bg-indigo-100 transition-all">6x1</button>
+                  <button onclick="selectShiftBlock('night', '1')" class="w-full bg-indigo-200 border-2 border-indigo-500 rounded-lg py-1 px-2 text-sm font-bold hover:bg-indigo-300 transition-all">Agregar 1 Noche</button>
+                </div>
+              </div>
 
-              <button
-                id="selectShiftRest"
-                data-shift="rest"
-                class="shift-selector p-6 rounded-xl border-4 transition-all cursor-pointer hover:scale-105 bg-green-100 border-green-500"
-                onclick="selectShiftType('rest')"
-              >
-                <div class="text-4xl mb-2">🏖️</div>
-                <div class="text-xl font-bold">DESCANSO</div>
-              </button>
+              <!-- Tarjeta DESCANSO -->
+              <div class="shift-card bg-green-50 border-4 border-green-500 rounded-xl p-4">
+                <div class="text-4xl mb-2 text-center">🏖️</div>
+                <div class="text-xl font-bold text-center mb-3">DESCANSO</div>
+                <div class="space-y-2">
+                  <button onclick="selectShiftBlock('rest', '1')" class="w-full bg-green-200 border-2 border-green-500 rounded-lg py-2 px-2 text-sm font-bold hover:bg-green-300 transition-all">Agregar 1 descanso</button>
+                  <button onclick="selectShiftBlock('rest', '2')" class="w-full bg-green-200 border-2 border-green-500 rounded-lg py-2 px-2 text-sm font-bold hover:bg-green-300 transition-all">Agregar 2 descansos</button>
+                  <button onclick="selectShiftBlock('rest', '3')" class="w-full bg-green-200 border-2 border-green-500 rounded-lg py-2 px-2 text-sm font-bold hover:bg-green-300 transition-all">Agregar 3 descansos</button>
+                </div>
+              </div>
             </div>
 
             <div class="mt-4 text-center">
@@ -1460,70 +1777,6 @@
                 <strong>Turno seleccionado:</strong>
                 <span id="selectedShiftLabel" class="font-bold text-lg">Ninguno</span>
               </p>
-            </div>
-          </div>
-
-          <!-- Ciclos automáticos arrastrables -->
-          <div class="glass rounded-2xl p-6 bg-gradient-to-br from-blue-50 to-purple-50">
-            <h3 class="text-lg font-bold mb-4">2️⃣ Aplicar ciclos automáticos</h3>
-            <p class="text-sm text-slate-600 mb-4">Arrastra un ciclo a un turno para aplicarlo desde la fecha de inicio:</p>
-
-            <!-- Fichas de ciclos -->
-            <div class="flex flex-wrap gap-3 justify-center mb-6">
-              <div
-                draggable="true"
-                data-cycle="4x3"
-                class="cycle-chip cursor-grab bg-gradient-to-br from-purple-400 to-purple-600 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-110 transition-all border-4 border-purple-700"
-                title="4 días trabajo, 3 días descanso"
-              >
-                ⋮⋮ 4x3
-              </div>
-              <div
-                draggable="true"
-                data-cycle="5x2"
-                class="cycle-chip cursor-grab bg-gradient-to-br from-blue-400 to-blue-600 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-110 transition-all border-4 border-blue-700"
-                title="5 días trabajo, 2 días descanso"
-              >
-                ⋮⋮ 5x2
-              </div>
-              <div
-                draggable="true"
-                data-cycle="6x1"
-                class="cycle-chip cursor-grab bg-gradient-to-br from-green-400 to-green-600 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-110 transition-all border-4 border-green-700"
-                title="6 días trabajo, 1 día descanso"
-              >
-                ⋮⋮ 6x1
-              </div>
-            </div>
-
-            <!-- Zonas drop para turnos -->
-            <div class="grid md:grid-cols-3 gap-4">
-              <div
-                class="cycle-drop-zone border-4 border-dashed border-amber-400 bg-amber-50 rounded-xl p-6 text-center transition-all hover:bg-amber-100 hover:scale-105"
-                data-shift="day"
-              >
-                <div class="text-4xl mb-2">☀️</div>
-                <div class="text-xl font-bold text-amber-900">DÍA</div>
-                <div class="text-xs text-slate-600 mt-2">Suelta un ciclo aquí</div>
-              </div>
-
-              <div
-                class="cycle-drop-zone border-4 border-dashed border-orange-400 bg-orange-50 rounded-xl p-6 text-center transition-all hover:bg-orange-100 hover:scale-105"
-                data-shift="afternoon"
-              >
-                <div class="text-4xl mb-2">🌤️</div>
-                <div class="text-xl font-bold text-orange-900">TARDE</div>
-                <div class="text-xs text-slate-600 mt-2">Suelta un ciclo aquí</div>
-              </div>
-
-              <div
-                class="cycle-drop-zone border-4 border-dashed border-indigo-400 bg-indigo-50 rounded-xl p-6 text-center transition-all hover:bg-indigo-100 hover:scale-105"
-                data-shift="night"
-              >
-                <div class="text-4xl mb-2">🌙</div>
-                <div class="text-xl font-bold text-indigo-900">NOCHE</div>
-                <div class="text-xs text-slate-600 mt-2">Suelta un ciclo aquí</div>
-              </div>
             </div>
           </div>
 
@@ -1547,14 +1800,23 @@
 
       // Resaltar el turno seleccionado si existe
       if (state.selectedShiftType) {
-        selectShiftType(state.selectedShiftType);
+        updateSelectedShiftLabel();
       }
 
-      // Conectar drag & drop de ciclos
-      wireCycleDragDrop();
+      // Actualizar contador de días
+      updateAssignedDaysCounter();
 
       // Renderizar tabs del modo manual
       renderTabManual('calendar');
+    }
+
+    // Actualizar el contador de días asignados
+    function updateAssignedDaysCounter() {
+      const totalAssignedElem = document.getElementById('totalAssignedDays');
+      if (totalAssignedElem && state.manualDays) {
+        const totalDays = Object.keys(state.manualDays).length;
+        totalAssignedElem.textContent = totalDays;
+      }
     }
 
     function renderManualCalendar() {
@@ -1589,7 +1851,7 @@
               ${state.groups.map(g => `
                 <div class="space-y-2">
                   <div class="${groupColors[g]} rounded-xl p-3 text-center font-bold text-lg shadow-md">
-                    G${g}
+                    ${getGroupDisplayName(g)}
                   </div>
                   ${cycles.map(c => `
                     <div
@@ -1597,7 +1859,7 @@
                       data-group="${g}"
                       data-cycle="${c}"
                       class="draggable-item border-2 ${groupBorders[g]} bg-white rounded-lg p-2 text-center font-semibold text-sm cursor-grab hover:shadow-lg transition-all"
-                      title="Arrastra G${g} con ciclo ${c}"
+                      title="Arrastra ${getGroupDisplayName(g)} con ciclo ${c}"
                     >
                       ⋮⋮ ${c}
                     </div>
@@ -1676,9 +1938,12 @@
 
       const base = new Date(state.selectedMonth + '-01');
       const months = [];
+      const startYear = base.getFullYear();
+      const startMonth = base.getMonth();
       for (let i = 0; i < 3; i++) {
-        const m = new Date(base);
-        m.setMonth(base.getMonth() + i);
+        const year = startYear + Math.floor((startMonth + i) / 12);
+        const month = (startMonth + i) % 12;
+        const m = new Date(year, month, 1);
         months.push(m.toLocaleDateString('es-CL', {month: 'short', year: 'numeric'}));
       }
       breadcrumb.textContent = `📅 ${months.join(' → ')}`;
@@ -1795,9 +2060,12 @@
         // Tablas por 3 meses
         const base = new Date(month + '-01');
         let htmlG = '', htmlS = '';
+        const startYear = base.getFullYear();
+        const startMonth = base.getMonth();
         for (let i = 0; i < 3; i++) {
-          const m = new Date(base);
-          m.setMonth(base.getMonth() + i);
+          const year = startYear + Math.floor((startMonth + i) / 12);
+          const monthNum = (startMonth + i) % 12;
+          const m = new Date(year, monthNum, 1);
           const key = m.toISOString().slice(0,7);
           htmlG += `<h3 class="mt-6 mb-2 font-bold">${new Date(key+'-01').toLocaleDateString('es-CL',{month:'long',year:'numeric'})}</h3>` + htmlByGroup(byGroup, key);
           htmlS += `<h3 class="mt-6 mb-2 font-bold">${new Date(key+'-01').toLocaleDateString('es-CL',{month:'long',year:'numeric'})}</h3>` + htmlByShift(monthByShift(calendar, key));
@@ -2073,9 +2341,9 @@
         const header = ['Grupo', ...days.map(d => d.js.toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}))];
         const rows = [header];
         Object.keys(mg).sort().forEach(g => {
-          rows.push([`G${g}`, ...mg[g].map(x => 
-            x.shift === 'day' ? 'Día' : 
-            x.shift === 'afternoon' ? 'Tarde' : 
+          rows.push([getGroupDisplayName(g), ...mg[g].map(x =>
+            x.shift === 'day' ? 'Día' :
+            x.shift === 'afternoon' ? 'Tarde' :
             x.shift === 'night' ? 'Noche' : 'Descanso'
           )]);
         });
@@ -2087,7 +2355,7 @@
       
       // Crear hoja consolidada anual
       const allGroups = Object.keys(byGroup).sort();
-      const annualHeader = ['Fecha', 'Día Semana', ...allGroups.map(g => `G${g}`)];
+      const annualHeader = ['Fecha', 'Día Semana', ...allGroups.map(g => getGroupDisplayName(g))];
       const annualRows = [annualHeader];
       
       // Iterar sobre todos los meses
@@ -2149,7 +2417,7 @@
         });
       });
       
-      const sundayHeader = ['Mes', ...allGroups.map(g => `G${g} Libres`), ...allGroups.map(g => `G${g} Total`)];
+      const sundayHeader = ['Mes', ...allGroups.map(g => `${getGroupDisplayName(g)} Libres`), ...allGroups.map(g => `${getGroupDisplayName(g)} Total`)];
       const sundayRows = [sundayHeader];
       
       monthsList.forEach(yyyyMM => {
@@ -2493,13 +2761,26 @@
     (function init(){
       const auto=localStorage.getItem('turnos_pro_autosave');
       if(auto){ try{ state=JSON.parse(auto);}catch{} }
-      if(!state.selectedMonth){ state.selectedMonth = state.startDate.slice(0,7); }
+
+      // Forzar fechas correctas desde defaultState para coherencia
+      state.startDate = defaultState.startDate;
+      state.endDate = defaultState.endDate;
+      // Siempre sincronizar selectedMonth con startDate para coherencia
+      state.selectedMonth = state.startDate.slice(0,7);
       // Asegurar que propiedades nuevas existan (para compatibilidad con estados antiguos)
       if(!state.manualCalendar){ state.manualCalendar = {}; }
       if(state.manualMode === undefined){ state.manualMode = false; }
       if(!state.manualAssignments){ state.manualAssignments = { day: [], afternoon: [], night: [] }; }
       if(!state.manualDays){ state.manualDays = {}; }
+      if(!state.manualDaysByGroup){ state.manualDaysByGroup = {}; }
       if(state.selectedShiftType === undefined){ state.selectedShiftType = null; }
+      if(state.selectedGroupId === undefined){ state.selectedGroupId = null; }
+      if(!state.groupNames){
+        state.groupNames = {};
+        state.groups.forEach((g, idx) => {
+          state.groupNames[g] = `Grupo ${idx + 1}`;
+        });
+      }
 
       wireBasics();
       updateModeUI(); // Actualizar UI del modo
