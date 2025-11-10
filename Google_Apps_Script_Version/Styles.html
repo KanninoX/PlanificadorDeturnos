@@ -1,0 +1,333 @@
+<style>
+  /* Custom Styles for Shift Scheduler */
+
+  /* Mode Toggle Buttons */
+  .mode-btn {
+    background-color: transparent;
+    color: #9ca3af;
+  }
+
+  .mode-btn.active {
+    background-color: #3b82f6;
+    color: white;
+  }
+
+  /* Tab Buttons */
+  .tab-btn,
+  .tab-btn-manual {
+    background-color: transparent;
+    color: #9ca3af;
+    border-bottom: 2px solid transparent;
+  }
+
+  .tab-btn.active,
+  .tab-btn-manual.active {
+    color: white;
+    border-bottom: 2px solid #3b82f6;
+  }
+
+  .tab-btn:hover,
+  .tab-btn-manual:hover {
+    color: white;
+  }
+
+  /* Shift Type Buttons */
+  .shift-type-btn.selected {
+    background-color: #3b82f6;
+    color: white;
+    border: 2px solid #60a5fa;
+  }
+
+  /* Draggable Group Cards */
+  .group-card {
+    cursor: grab;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .group-card:active {
+    cursor: grabbing;
+  }
+
+  .group-card.dragging {
+    opacity: 0.5;
+    transform: rotate(5deg);
+  }
+
+  .group-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Drop Zones */
+  .drop-zone {
+    transition: all 0.3s;
+  }
+
+  .drop-zone.drag-over {
+    background-color: #374151;
+    border-color: #3b82f6;
+    border-style: solid;
+  }
+
+  /* Assignment Cards */
+  .assignment-card {
+    position: relative;
+    border-left: 4px solid;
+  }
+
+  .assignment-card .btn-remove {
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .assignment-card:hover .btn-remove {
+    opacity: 1;
+  }
+
+  /* Calendar Tables */
+  .calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .calendar-table th {
+    background-color: #374151;
+    padding: 12px 8px;
+    text-align: center;
+    font-weight: 600;
+    border: 1px solid #4b5563;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .calendar-table td {
+    padding: 10px 8px;
+    text-align: center;
+    border: 1px solid #4b5563;
+    background-color: #1f2937;
+  }
+
+  .calendar-table td.sunday {
+    background-color: #991b1b;
+  }
+
+  .calendar-table td.working {
+    font-weight: 600;
+    color: white;
+  }
+
+  .calendar-table td.rest {
+    color: #6b7280;
+  }
+
+  /* Manual Calendar Clickable Cells */
+  .calendar-table td.clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .calendar-table td.clickable:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px #3b82f6;
+    z-index: 5;
+  }
+
+  /* Month Selector */
+  .month-selector {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 1rem;
+  }
+
+  .month-btn {
+    padding: 0.5rem 1rem;
+    background-color: #374151;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .month-btn:hover {
+    background-color: #4b5563;
+  }
+
+  .month-btn.active {
+    background-color: #3b82f6;
+    color: white;
+  }
+
+  /* Toast Notifications */
+  .toast {
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 250px;
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .toast.success {
+    background-color: #065f46;
+    border-left: 4px solid #10b981;
+  }
+
+  .toast.error {
+    background-color: #7f1d1d;
+    border-left: 4px solid #ef4444;
+  }
+
+  .toast.info {
+    background-color: #1e3a8a;
+    border-left: 4px solid #3b82f6;
+  }
+
+  .toast.warning {
+    background-color: #78350f;
+    border-left: 4px solid #f59e0b;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #1f2937;
+    border-radius: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .calendar-table th,
+    .calendar-table td {
+      padding: 6px 4px;
+      font-size: 0.75rem;
+    }
+
+    .group-card {
+      font-size: 0.875rem;
+      padding: 0.5rem !important;
+    }
+
+    .month-btn {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.75rem;
+    }
+  }
+
+  /* Cycle Input Styles */
+  .cycle-input {
+    background-color: #374151;
+    color: white;
+    border: 1px solid #4b5563;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    width: 80px;
+  }
+
+  .cycle-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    ring: 1px solid #3b82f6;
+  }
+
+  /* Loading Spinner */
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .spinner {
+    border: 2px solid #4b5563;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 0.6s linear infinite;
+  }
+
+  /* Group Color Indicators */
+  .color-indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: inline-block;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  /* Utility Classes */
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .glass-effect {
+    background: rgba(31, 41, 55, 0.8);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Interactive Calendar Cell Highlighting */
+  .calendar-table tbody tr:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+
+  /* Assignment Card Animations */
+  .assignment-card {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Button Pulse Effect */
+  .btn-pulse {
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+</style>

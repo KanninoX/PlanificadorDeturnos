@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Simulador de Turnos 🐟 — Planificador Industrial</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- xlsx-js-style: versión con soporte de estilos y colores -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     :root { --glass-bg: rgba(255, 255, 255, .58); --glass-stroke: rgba(255, 255, 255, .35); }
     html, body { height: 100%; overflow-x: hidden; width: 100%; max-width: 100vw; }
@@ -601,7 +602,115 @@
     const groupColors = { '1': 'bg-purple-500 text-white','2': 'bg-pink-500 text-white','3': 'bg-blue-500 text-white','4': 'bg-green-500 text-white','A2': 'bg-amber-500 text-white','B2': 'bg-cyan-500 text-white','C2': 'bg-rose-500 text-white','D2': 'bg-teal-500 text-white' };
     const groupBorders = { '1': 'border-purple-500','2': 'border-pink-500','3': 'border-blue-500','4': 'border-green-500','A2': 'border-amber-500','B2': 'border-cyan-500','C2': 'border-rose-500','D2': 'border-teal-500' };
 
+    // Colores HEX para Excel (sin el #)
+    const groupColorsHex = {
+      '1': 'A855F7',   // purple-500
+      '2': 'EC4899',   // pink-500
+      '3': '3B82F6',   // blue-500
+      '4': '10B981',   // green-500
+      'A2': 'F59E0B',  // amber-500
+      'B2': '06B6D4',  // cyan-500
+      'C2': 'F43F5E',  // rose-500
+      'D2': '14B8A6'   // teal-500
+    };
+
     const clone = (o)=> JSON.parse(JSON.stringify(o));
+
+    // ===== GOOGLE APPS SCRIPT HELPERS =====
+    // Reemplazan localStorage con Google Sheets
+
+    /**
+     * Guardar estado en Google Sheets (reemplaza localStorage.setItem)
+     */
+    async function saveToSheets() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        toast('⚠️ Google Apps Script no disponible', 'error');
+        return;
+      }
+
+      try {
+        const stateJSON = JSON.stringify(state);
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(response => {
+              if (response.success) {
+                toast('💾 Guardado en Google Sheets', 'success');
+                resolve(response);
+              } else {
+                toast('⚠️ Error al guardar: ' + response.error, 'error');
+                reject(new Error(response.error));
+              }
+            })
+            .withFailureHandler(error => {
+              toast('⚠️ Error al guardar: ' + error.message, 'error');
+              reject(error);
+            })
+            .saveState(stateJSON);
+        });
+      } catch (error) {
+        toast('⚠️ Error: ' + error.message, 'error');
+        throw error;
+      }
+    }
+
+    /**
+     * Cargar estado desde Google Sheets (reemplaza localStorage.getItem)
+     */
+    async function loadFromSheets() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        toast('⚠️ Google Apps Script no disponible', 'error');
+        return;
+      }
+
+      try {
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(response => {
+              if (response.success && response.data) {
+                pushHistory();
+                state = JSON.parse(response.data);
+                renderAll();
+                toast('📂 Configuración cargada', 'success');
+                resolve(state);
+              } else {
+                toast('⚠️ No hay guardado previo', 'error');
+                reject(new Error(response.message || 'No hay estado guardado'));
+              }
+            })
+            .withFailureHandler(error => {
+              toast('⚠️ Error al cargar: ' + error.message, 'error');
+              reject(error);
+            })
+            .loadState();
+        });
+      } catch (error) {
+        toast('⚠️ Error: ' + error.message, 'error');
+        throw error;
+      }
+    }
+
+    /**
+     * Autoguardado (sin notificación) - fire and forget
+     */
+    const saveAuto = () => {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        return; // Silenciosamente no hacer nada si no está disponible
+      }
+
+      try {
+        const stateJSON = JSON.stringify(state);
+        google.script.run
+          .withSuccessHandler(() => {
+            // Silencioso - no mostrar toast
+          })
+          .withFailureHandler(error => {
+            console.error('Error en autoguardado:', error);
+          })
+          .saveState(stateJSON);
+      } catch (error) {
+        console.error('Error en autoguardado:', error);
+      }
+    };
     const pushHistory = ()=>{ undoStack.push(clone(state)); redoStack.length = 0; };
 
     // ---------- UTILS ----------
@@ -1918,8 +2027,8 @@
         window.print();
       });
 
-      sv.addEventListener('click', ()=>{ localStorage.setItem('turnos_pro_state', JSON.stringify(state)); toast('💾 Guardado en este navegador', 'success'); });
-      ld.addEventListener('click', ()=>{ const raw=localStorage.getItem('turnos_pro_state'); if(!raw) return toast('⚠️ No hay guardado previo', 'error'); pushHistory(); state=JSON.parse(raw); renderAll(); toast('📂 Configuración cargada', 'success'); });
+      sv.addEventListener('click', () => saveToSheets());
+      ld.addEventListener('click', () => loadFromSheets());
       rs.addEventListener('click', ()=>{ if(confirm('¿Resetear al estado inicial?')){ pushHistory(); state=clone(defaultState); renderAll(); saveAuto(); toast('🧹 Sistema reseteado', 'info'); }});
 
       // Undo/Redo
@@ -2152,7 +2261,7 @@
       },2500);
     };
 
-    const saveAuto=()=> localStorage.setItem('turnos_pro_autosave', JSON.stringify(state));
+    // saveAuto ya está definido arriba con Google Apps Script
 
     function showLoading(message = 'Procesando...') {
       const loader = document.createElement('div');
@@ -2171,6 +2280,71 @@
     function hideLoading() {
       const loader = document.getElementById('globalLoader');
       if (loader) loader.remove();
+    }
+
+    /**
+     * Aplicar color a una celda de Excel (compatible con xlsx-js-style)
+     */
+    function applyCellColor(ws, cellAddress, bgColorHex, textColor = 'FFFFFF') {
+      if (!ws[cellAddress]) return;
+
+      ws[cellAddress].s = {
+        fill: {
+          patternType: 'solid',
+          fgColor: { rgb: bgColorHex }
+        },
+        font: {
+          color: { rgb: textColor },
+          bold: true,
+          sz: 11
+        },
+        alignment: {
+          horizontal: 'center',
+          vertical: 'center'
+        },
+        border: {
+          top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+          bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+          left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+          right: { style: 'thin', color: { rgb: 'CCCCCC' } }
+        }
+      };
+    }
+
+    /**
+     * Aplicar estilo a header (compatible con xlsx-js-style)
+     */
+    function applyHeaderStyle(ws, cellAddress) {
+      if (!ws[cellAddress]) return;
+
+      ws[cellAddress].s = {
+        fill: {
+          patternType: 'solid',
+          fgColor: { rgb: '1F2937' } // gray-800
+        },
+        font: {
+          color: { rgb: 'FFFFFF' },
+          bold: true,
+          sz: 12
+        },
+        alignment: {
+          horizontal: 'center',
+          vertical: 'center'
+        },
+        border: {
+          top: { style: 'medium', color: { rgb: '000000' } },
+          bottom: { style: 'medium', color: { rgb: '000000' } },
+          left: { style: 'medium', color: { rgb: '000000' } },
+          right: { style: 'medium', color: { rgb: '000000' } }
+        }
+      };
+    }
+
+    /**
+     * Obtener color del grupo en formato HEX
+     */
+    function getGroupColorHex(groupId) {
+      return groupColorsHex[groupId] || '6B7280'; // gray-500 por defecto
     }
 
     function exportXLSX(){
@@ -2247,8 +2421,42 @@
       wsGroups['!cols'] = [
         { wch: 12 },
         { wch: 12 },
-        ...allGroups.map(() => ({ wch: 10 }))
+        ...allGroups.map(() => ({ wch: 12 }))
       ];
+
+      // Aplicar estilos a headers
+      applyHeaderStyle(wsGroups, 'A1');
+      applyHeaderStyle(wsGroups, 'B1');
+      allGroups.forEach((g, idx) => {
+        const col = String.fromCharCode(67 + idx); // C, D, E, ...
+        applyHeaderStyle(wsGroups, col + '1');
+      });
+
+      // Aplicar colores a las celdas de grupos
+      const currentDate = new Date(start);
+      let rowIdx = 2; // Empezar en fila 2 (después del header)
+      while(currentDate <= end) {
+        const y = currentDate.getFullYear();
+        const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const d = String(currentDate.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+
+        allGroups.forEach((g, colIdx) => {
+          const col = String.fromCharCode(67 + colIdx); // C, D, E, ...
+          const cellAddress = col + rowIdx;
+          const groupDays = state.manualDaysByGroup[g] || {};
+          const shift = groupDays[dateStr] || 'rest';
+
+          // Solo aplicar color si NO es descanso
+          if (shift !== 'rest') {
+            applyCellColor(wsGroups, cellAddress, getGroupColorHex(g));
+          }
+        });
+
+        currentDate.setDate(currentDate.getDate() + 1);
+        rowIdx++;
+      }
+
       XLSX.utils.book_append_sheet(wb, wsGroups, 'Vista por Grupos');
 
       // HOJA 2: Vista por Turnos
@@ -2288,10 +2496,19 @@
       wsShifts['!cols'] = [
         { wch: 12 },
         { wch: 12 },
-        { wch: 30 },
-        { wch: 30 },
-        { wch: 30 }
+        { wch: 35 },
+        { wch: 35 },
+        { wch: 35 }
       ];
+
+      // Aplicar estilos a headers
+      applyHeaderStyle(wsShifts, 'A1');
+      applyHeaderStyle(wsShifts, 'B1');
+      // Headers de turnos con colores específicos
+      applyCellColor(wsShifts, 'C1', 'FEF3C7', '92400E'); // Día: amarillo
+      applyCellColor(wsShifts, 'D1', 'FED7AA', '9A3412'); // Tarde: naranja
+      applyCellColor(wsShifts, 'E1', 'C7D2FE', '3730A3'); // Noche: azul
+
       XLSX.utils.book_append_sheet(wb, wsShifts, 'Vista por Turnos');
     }
 
@@ -2380,10 +2597,19 @@
       wsShifts['!cols'] = [
         { wch: 12 },
         { wch: 12 },
-        { wch: 30 },
-        { wch: 30 },
-        { wch: 30 }
+        { wch: 35 },
+        { wch: 35 },
+        { wch: 35 }
       ];
+
+      // Aplicar estilos a headers
+      applyHeaderStyle(wsShifts, 'A1');
+      applyHeaderStyle(wsShifts, 'B1');
+      // Headers de turnos con colores específicos
+      applyCellColor(wsShifts, 'C1', 'FEF3C7', '92400E'); // Día: amarillo
+      applyCellColor(wsShifts, 'D1', 'FED7AA', '9A3412'); // Tarde: naranja
+      applyCellColor(wsShifts, 'E1', 'C7D2FE', '3730A3'); // Noche: azul
+
       XLSX.utils.book_append_sheet(wb, wsShifts, '2. Vista por Turnos');
 
       // HOJA 3: Vista por Grupos (lineal)
@@ -2425,8 +2651,42 @@
       wsGroups['!cols'] = [
         { wch: 12 },
         { wch: 12 },
-        ...allGroups.map(() => ({ wch: 10 }))
+        ...allGroups.map(() => ({ wch: 12 }))
       ];
+
+      // Aplicar estilos a headers
+      applyHeaderStyle(wsGroups, 'A1');
+      applyHeaderStyle(wsGroups, 'B1');
+      allGroups.forEach((g, idx) => {
+        const col = String.fromCharCode(67 + idx); // C, D, E, ...
+        applyHeaderStyle(wsGroups, col + '1');
+      });
+
+      // Aplicar colores a las celdas de grupos
+      const currentDate3 = new Date(start);
+      let rowIdx = 2; // Empezar en fila 2 (después del header)
+      while(currentDate3 <= end) {
+        const y = currentDate3.getFullYear();
+        const m = String(currentDate3.getMonth() + 1).padStart(2, '0');
+        const d = String(currentDate3.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+
+        allGroups.forEach((g, colIdx) => {
+          const col = String.fromCharCode(67 + colIdx); // C, D, E, ...
+          const cellAddress = col + rowIdx;
+          const groupData = byGroup[g];
+          const dayData = groupData.find(day => day.date === dateStr);
+
+          // Solo aplicar color si NO es descanso
+          if (dayData && dayData.shift !== 'rest' && dayData.isWorking) {
+            applyCellColor(wsGroups, cellAddress, getGroupColorHex(g));
+          }
+        });
+
+        currentDate3.setDate(currentDate3.getDate() + 1);
+        rowIdx++;
+      }
+
       XLSX.utils.book_append_sheet(wb, wsGroups, '3. Vista por Grupos');
     }
 
@@ -2735,10 +2995,34 @@
     }
 
     // ---------- INIT ----------
-    (function init(){
-      const auto=localStorage.getItem('turnos_pro_autosave');
-      const isFirstLoad = !auto; // Es la primera carga si no hay datos guardados
-      if(auto){ try{ state=JSON.parse(auto);}catch{} }
+    (async function init(){
+      let isFirstLoad = true;
+
+      // Intentar cargar estado guardado desde Google Sheets
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        try {
+          const response = await new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+              .loadState();
+          });
+
+          if (response.success && response.data) {
+            try {
+              state = JSON.parse(response.data);
+              isFirstLoad = false;
+              console.log('✅ Estado cargado desde Google Sheets');
+            } catch (error) {
+              console.error('❌ Error al parsear estado guardado:', error);
+            }
+          }
+        } catch (error) {
+          console.log('ℹ️ No hay estado previo guardado, usando defaultState');
+        }
+      } else {
+        console.warn('⚠️ Google Apps Script no disponible - usando modo local');
+      }
 
       // Forzar fechas correctas desde defaultState para coherencia
       state.startDate = defaultState.startDate;

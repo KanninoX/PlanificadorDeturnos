@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planificador de Turnos Industrial</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- SheetJS XLSX Library -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+
+  <?!= include('Styles'); ?>
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white min-h-screen">
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 hidden">
+    <div class="bg-gray-800 rounded-lg p-6 flex items-center space-x-4">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      <span class="text-lg">Cargando...</span>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="container mx-auto px-4 py-8">
+
+    <!-- Header -->
+    <header class="mb-8">
+      <h1 class="text-4xl font-bold text-center mb-2">Planificador de Turnos Industrial</h1>
+      <p class="text-gray-400 text-center">Sistema de gestión de turnos automático y manual</p>
+    </header>
+
+    <!-- Mode Toggle -->
+    <div class="mb-6 flex justify-center">
+      <div class="bg-gray-800 rounded-lg p-1 inline-flex">
+        <button id="btn-auto-mode" class="mode-btn px-6 py-2 rounded-md font-medium transition-colors">
+          Modo Automático
+        </button>
+        <button id="btn-manual-mode" class="mode-btn px-6 py-2 rounded-md font-medium transition-colors">
+          Modo Manual
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="main-content" class="space-y-6">
+
+      <!-- Automatic Mode Interface -->
+      <div id="auto-interface" class="hidden">
+
+        <!-- Quick Config -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl mb-6">
+          <h2 class="text-2xl font-bold mb-4">Configuración Rápida</h2>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Fecha Inicio</label>
+              <input type="date" id="input-start-date" class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Fecha Fin</label>
+              <input type="date" id="input-end-date" class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Máx. Grupos/Turno</label>
+              <input type="number" id="input-max-groups" min="1" max="10" class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <button id="btn-save-config" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+              Guardar Configuración
+            </button>
+            <button id="btn-calculate" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors">
+              Calcular Calendario
+            </button>
+          </div>
+        </div>
+
+        <!-- Shift Assignments -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl mb-6">
+          <h2 class="text-2xl font-bold mb-4">Asignación de Turnos</h2>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Day Shift -->
+            <div>
+              <h3 class="text-lg font-semibold mb-3 text-yellow-400">☀️ Mañana</h3>
+              <div id="drop-zone-day" class="drop-zone min-h-[100px] bg-gray-700 rounded-lg p-3 border-2 border-dashed border-gray-600">
+                <div id="assignments-day" class="space-y-2"></div>
+              </div>
+            </div>
+
+            <!-- Afternoon Shift -->
+            <div>
+              <h3 class="text-lg font-semibold mb-3 text-orange-400">🌤️ Tarde</h3>
+              <div id="drop-zone-afternoon" class="drop-zone min-h-[100px] bg-gray-700 rounded-lg p-3 border-2 border-dashed border-gray-600">
+                <div id="assignments-afternoon" class="space-y-2"></div>
+              </div>
+            </div>
+
+            <!-- Night Shift -->
+            <div>
+              <h3 class="text-lg font-semibold mb-3 text-blue-400">🌙 Noche</h3>
+              <div id="drop-zone-night" class="drop-zone min-h-[100px] bg-gray-700 rounded-lg p-3 border-2 border-dashed border-gray-600">
+                <div id="assignments-night" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Available Groups -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold">Grupos Disponibles</h2>
+            <button id="btn-add-group-auto" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors">
+              + Agregar Grupo
+            </button>
+          </div>
+          <div id="available-groups-auto" class="flex flex-wrap gap-3"></div>
+        </div>
+
+        <!-- Calendar Tabs -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold">Calendario Generado</h2>
+            <div class="flex gap-2">
+              <button id="btn-export-sheet-auto" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors">
+                Exportar a Google Sheet
+              </button>
+              <button id="btn-export-xlsx-auto" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+                Exportar XLSX
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="flex gap-2 mb-4 border-b border-gray-700">
+            <button class="tab-btn px-4 py-2 font-medium" data-tab="by-shift">Por Turno</button>
+            <button class="tab-btn px-4 py-2 font-medium" data-tab="by-group">Por Grupo</button>
+          </div>
+
+          <div id="calendar-content-auto" class="overflow-x-auto"></div>
+        </div>
+      </div>
+
+      <!-- Manual Mode Interface -->
+      <div id="manual-interface" class="hidden">
+
+        <!-- Manual Controls -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl mb-6">
+          <h2 class="text-2xl font-bold mb-4">Construcción Manual de Turnos</h2>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Fecha Inicio</label>
+              <input type="date" id="input-start-date-manual" class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Fecha Fin</label>
+              <input type="date" id="input-end-date-manual" class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div class="flex gap-4 mb-4">
+            <button id="btn-save-manual-config" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+              Guardar Configuración
+            </button>
+            <button id="btn-calculate-manual" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors">
+              Generar Calendario
+            </button>
+            <button id="btn-clear-calendar" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors">
+              Limpiar Calendario
+            </button>
+            <button id="btn-undo-manual" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-medium transition-colors">
+              ↩️ Deshacer
+            </button>
+            <button id="btn-redo-manual" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-medium transition-colors">
+              ↪️ Rehacer
+            </button>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-2">Seleccionar Grupo</label>
+            <select id="select-group-manual" class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+              <option value="">-- Seleccionar Grupo --</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-2">Seleccionar Turno para Asignar</label>
+            <div class="flex gap-3">
+              <button class="shift-type-btn px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors" data-shift="day">
+                ☀️ Mañana
+              </button>
+              <button class="shift-type-btn px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors" data-shift="afternoon">
+                🌤️ Tarde
+              </button>
+              <button class="shift-type-btn px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors" data-shift="night">
+                🌙 Noche
+              </button>
+              <button class="shift-type-btn px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors" data-shift="rest">
+                💤 Descanso
+              </button>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <button id="btn-add-group-manual" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors">
+              + Agregar Grupo
+            </button>
+          </div>
+        </div>
+
+        <!-- Manual Calendar Tabs -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold">Calendario Manual</h2>
+            <div class="flex gap-2">
+              <button id="btn-export-sheet-manual" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors">
+                Exportar a Google Sheet
+              </button>
+              <button id="btn-export-xlsx-manual" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+                Exportar XLSX
+              </button>
+            </div>
+          </div>
+
+          <!-- Manual Tabs -->
+          <div class="flex gap-2 mb-4 border-b border-gray-700">
+            <button class="tab-btn-manual px-4 py-2 font-medium" data-tab="by-group">Por Grupo</button>
+            <button class="tab-btn-manual px-4 py-2 font-medium" data-tab="by-shift">Por Turno</button>
+          </div>
+
+          <div id="calendar-content-manual" class="overflow-x-auto"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <?!= include('ClientScript'); ?>
+
+</body>
+</html>

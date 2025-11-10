@@ -1,0 +1,1062 @@
+<script>
+/**
+ * Planificador de Turnos Industrial - Client Script
+ * Handles all client-side logic and UI interactions
+ */
+
+// ==================== STATE MANAGEMENT ====================
+
+let state = {
+  startDate: '2025-10-01',
+  endDate: '2027-09-30',
+  selectedMonth: null,
+  maxGroupsPerShift: 4,
+  groups: [],
+  groupNames: {},
+  shiftAssignments: {
+    day: [],
+    afternoon: [],
+    night: []
+  },
+  rules: {
+    minFreeSundaysPerMonth: 2,
+    maxConsecutiveWorkDays: 6
+  },
+  manualMode: false,
+  selectedShiftType: null,
+  selectedGroupId: null,
+  manualDaysByGroup: {},
+  manualAssignments: {
+    day: [],
+    afternoon: [],
+    night: []
+  },
+  manualDays: {}
+};
+
+let calendar = null;
+let byGroup = null;
+let undoStack = [];
+let redoStack = [];
+
+// ==================== API WRAPPER FUNCTIONS ====================
+
+/**
+ * Promise wrapper for google.script.run
+ */
+function runServerFunction(functionName, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(response => {
+        if (response.success) {
+          resolve(response.data || response);
+        } else {
+          reject(new Error(response.error || 'Error desconocido'));
+        }
+      })
+      .withFailureHandler(error => {
+        reject(error);
+      })
+      [functionName](...args);
+  });
+}
+
+/**
+ * Load initial state from server
+ */
+async function loadState() {
+  try {
+    showLoading();
+
+    // Add timeout to prevent infinite loading
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout: El servidor no responde')), 30000);
+    });
+
+    const result = await Promise.race([
+      runServerFunction('getInitialState'),
+      timeoutPromise
+    ]);
+
+    state = result;
+
+    // Initialize selected month intelligently
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const startMonth = state.startDate.slice(0, 7);
+    const endMonth = state.endDate.slice(0, 7);
+
+    if (!state.selectedMonth || state.selectedMonth < startMonth || state.selectedMonth > endMonth) {
+      if (currentMonth >= startMonth && currentMonth <= endMonth) {
+        state.selectedMonth = currentMonth;
+      } else {
+        state.selectedMonth = startMonth;
+      }
+    }
+
+    renderAll();
+    toast('Estado cargado correctamente', 'success');
+  } catch (error) {
+    console.error('Error loading state:', error);
+    toast('Error al cargar estado: ' + error.message, 'error');
+
+    // Show error message on screen
+    document.getElementById('main-content').innerHTML = `
+      <div class="bg-red-900 border border-red-700 rounded-lg p-6 text-center">
+        <h2 class="text-2xl font-bold mb-4">Error al cargar la aplicación</h2>
+        <p class="mb-4">${error.message}</p>
+        <p class="text-sm text-gray-300 mb-4">Revisa la consola del navegador (F12) para más detalles.</p>
+        <button onclick="location.reload()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+          Reintentar
+        </button>
+      </div>
+    `;
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Save state to server
+ */
+async function saveState() {
+  try {
+    await runServerFunction('saveConfiguration', state);
+    toast('Configuración guardada', 'success');
+  } catch (error) {
+    console.error('Error saving state:', error);
+    toast('Error al guardar: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Calculate schedule
+ */
+async function calculateSchedule() {
+  try {
+    showLoading();
+    const result = await runServerFunction('calculateSchedule', state);
+    calendar = result.calendar;
+    byGroup = result.byGroup;
+
+    renderCalendar();
+    toast('Calendario calculado correctamente', 'success');
+  } catch (error) {
+    console.error('Error calculating schedule:', error);
+    toast('Error al calcular calendario: ' + error.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Export to Google Sheet
+ */
+async function exportToGoogleSheet() {
+  try {
+    showLoading();
+    const result = await runServerFunction('exportSchedule', 'sheet', state);
+
+    if (result.url) {
+      toast('Exportado a Google Sheet correctamente', 'success');
+      window.open(result.url, '_blank');
+    }
+  } catch (error) {
+    console.error('Error exporting to sheet:', error);
+    toast('Error al exportar: ' + error.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Export to XLSX (client-side)
+ */
+async function exportToXLSX() {
+  try {
+    showLoading();
+    const xlsxData = await runServerFunction('exportSchedule', 'xlsx', state);
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+
+    // Add sheets with data and colors
+    xlsxData.sheets.forEach(sheetData => {
+      let ws;
+
+      if (sheetData.headers && sheetData.headers.length > 0) {
+        // Sheet with headers
+        const data = [sheetData.headers, ...sheetData.data];
+        ws = XLSX.utils.aoa_to_sheet(data);
+      } else {
+        // Sheet without headers (like config)
+        ws = XLSX.utils.aoa_to_sheet(sheetData.data);
+      }
+
+      // Apply colors
+      if (sheetData.colorMap && sheetData.colorMap.length > 0) {
+        sheetData.colorMap.forEach(colorInfo => {
+          const cellAddress = XLSX.utils.encode_cell({
+            r: colorInfo.row + 1, // +1 for header row
+            c: colorInfo.col
+          });
+
+          if (!ws[cellAddress]) return;
+
+          // Apply cell style
+          if (!ws[cellAddress].s) ws[cellAddress].s = {};
+          ws[cellAddress].s.fgColor = { rgb: colorInfo.color.replace('#', '') };
+          ws[cellAddress].s.font = { color: { rgb: 'FFFFFF' }, bold: true };
+        });
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, sheetData.name);
+    });
+
+    // Generate filename
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const mode = state.manualMode ? 'Manual' : 'Auto';
+    const filename = `Turnos_${mode}_${timestamp}.xlsx`;
+
+    // Download
+    XLSX.writeFile(wb, filename);
+
+    toast('Archivo XLSX descargado', 'success');
+  } catch (error) {
+    console.error('Error exporting to XLSX:', error);
+    toast('Error al exportar XLSX: ' + error.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Add new group
+ */
+async function addGroup() {
+  const name = prompt('Nombre del nuevo grupo:');
+  if (!name) return;
+
+  try {
+    const result = await runServerFunction('addGroup', { name });
+    state.groups.push(result.groupId);
+    state.groupNames[result.groupId] = result.name;
+
+    // Initialize manual calendar for new group
+    if (!state.manualDaysByGroup[result.groupId]) {
+      state.manualDaysByGroup[result.groupId] = {};
+    }
+
+    renderAll();
+    toast(`Grupo "${result.name}" agregado`, 'success');
+  } catch (error) {
+    console.error('Error adding group:', error);
+    toast('Error al agregar grupo: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Delete group
+ */
+async function deleteGroup(groupId) {
+  if (!confirm(`¿Eliminar grupo "${getGroupDisplayName(groupId)}"?`)) return;
+
+  try {
+    await runServerFunction('deleteGroup', groupId);
+    state.groups = state.groups.filter(g => g !== groupId);
+    delete state.groupNames[groupId];
+    delete state.manualDaysByGroup[groupId];
+
+    // Remove from shift assignments
+    ['day', 'afternoon', 'night'].forEach(shift => {
+      state.shiftAssignments[shift] = state.shiftAssignments[shift].filter(
+        a => a.groupId !== groupId
+      );
+    });
+
+    renderAll();
+    toast('Grupo eliminado', 'success');
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    toast('Error al eliminar grupo: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Clear manual calendar
+ */
+async function clearManualCalendar() {
+  if (!confirm('¿Limpiar todo el calendario manual?')) return;
+
+  try {
+    await runServerFunction('clearManualCalendar');
+    state.groups.forEach(groupId => {
+      state.manualDaysByGroup[groupId] = {};
+    });
+    state.manualDays = {};
+
+    renderAll();
+    toast('Calendario manual limpiado', 'success');
+  } catch (error) {
+    console.error('Error clearing calendar:', error);
+    toast('Error al limpiar calendario: ' + error.message, 'error');
+  }
+}
+
+// ==================== UNDO/REDO ====================
+
+function saveHistory() {
+  undoStack.push(clone(state));
+  redoStack = [];
+
+  // Keep only last 50 states
+  if (undoStack.length > 50) {
+    undoStack.shift();
+  }
+}
+
+async function undo() {
+  if (undoStack.length === 0) {
+    toast('No hay cambios para deshacer', 'info');
+    return;
+  }
+
+  const prev = undoStack.pop();
+  redoStack.push(clone(state));
+  state = prev;
+
+  await saveState();
+  renderAll();
+
+  if (state.manualMode) {
+    const currentTab = document.querySelector('.tab-btn-manual.active')?.dataset.tab || 'by-group';
+    renderTabManual(currentTab);
+  }
+
+  toast('Cambio deshecho', 'info');
+}
+
+async function redo() {
+  if (redoStack.length === 0) {
+    toast('No hay cambios para rehacer', 'info');
+    return;
+  }
+
+  const next = redoStack.pop();
+  undoStack.push(clone(state));
+  state = next;
+
+  await saveState();
+  renderAll();
+
+  if (state.manualMode) {
+    const currentTab = document.querySelector('.tab-btn-manual.active')?.dataset.tab || 'by-group';
+    renderTabManual(currentTab);
+  }
+
+  toast('Cambio rehecho', 'info');
+}
+
+// ==================== UI RENDERING ====================
+
+function renderAll() {
+  // Update mode buttons
+  document.getElementById('btn-auto-mode').classList.toggle('active', !state.manualMode);
+  document.getElementById('btn-manual-mode').classList.toggle('active', state.manualMode);
+
+  // Show/hide interfaces
+  document.getElementById('auto-interface').classList.toggle('hidden', state.manualMode);
+  document.getElementById('manual-interface').classList.toggle('hidden', !state.manualMode);
+
+  if (state.manualMode) {
+    renderManualInterface();
+  } else {
+    renderAutoInterface();
+  }
+}
+
+function renderAutoInterface() {
+  // Update config inputs
+  document.getElementById('input-start-date').value = state.startDate;
+  document.getElementById('input-end-date').value = state.endDate;
+  document.getElementById('input-max-groups').value = state.maxGroupsPerShift;
+
+  // Render shift assignments
+  renderShiftAssignments();
+
+  // Render available groups
+  renderAvailableGroups();
+
+  // Render calendar if exists
+  if (calendar) {
+    renderCalendar();
+  }
+}
+
+function renderManualInterface() {
+  // Update config inputs
+  document.getElementById('input-start-date-manual').value = state.startDate;
+  document.getElementById('input-end-date-manual').value = state.endDate;
+
+  // Populate group selector
+  const select = document.getElementById('select-group-manual');
+  select.innerHTML = '<option value="">-- Seleccionar Grupo --</option>';
+  state.groups.forEach(groupId => {
+    const option = document.createElement('option');
+    option.value = groupId;
+    option.textContent = getGroupDisplayName(groupId);
+    if (groupId === state.selectedGroupId) {
+      option.selected = true;
+    }
+    select.appendChild(option);
+  });
+
+  // Highlight selected shift type
+  document.querySelectorAll('.shift-type-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.shift === state.selectedShiftType);
+  });
+
+  // Render calendar if exists
+  if (calendar) {
+    const currentTab = document.querySelector('.tab-btn-manual.active')?.dataset.tab || 'by-group';
+    renderTabManual(currentTab);
+  }
+}
+
+function renderShiftAssignments() {
+  ['day', 'afternoon', 'night'].forEach(shift => {
+    const container = document.getElementById(`assignments-${shift}`);
+    container.innerHTML = '';
+
+    state.shiftAssignments[shift].forEach(assignment => {
+      const card = createAssignmentCard(shift, assignment);
+      container.appendChild(card);
+    });
+  });
+}
+
+function createAssignmentCard(shift, assignment) {
+  const div = document.createElement('div');
+  div.className = 'assignment-card bg-gray-800 rounded-lg p-3 flex items-center justify-between';
+  div.style.borderLeftColor = getGroupColor(assignment.groupId);
+
+  const info = document.createElement('div');
+  info.innerHTML = `
+    <div class="font-semibold">${getGroupDisplayName(assignment.groupId)}</div>
+    <div class="text-sm text-gray-400">
+      Ciclo: ${assignment.cycle1}${assignment.cycle2 ? ' / ' + assignment.cycle2 : ''}
+      | Offset: ${assignment.startOffset || 0}
+    </div>
+  `;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'btn-remove px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-sm';
+  removeBtn.textContent = '✕';
+  removeBtn.onclick = () => removeAssignment(shift, assignment.groupId);
+
+  div.appendChild(info);
+  div.appendChild(removeBtn);
+
+  return div;
+}
+
+function renderAvailableGroups() {
+  const container = document.getElementById('available-groups-auto');
+  container.innerHTML = '';
+
+  // Get assigned group IDs
+  const assignedGroupIds = new Set();
+  ['day', 'afternoon', 'night'].forEach(shift => {
+    state.shiftAssignments[shift].forEach(a => assignedGroupIds.add(a.groupId));
+  });
+
+  // Show all groups (both assigned and unassigned)
+  state.groups.forEach(groupId => {
+    const card = createGroupCard(groupId, assignedGroupIds.has(groupId));
+    container.appendChild(card);
+  });
+}
+
+function createGroupCard(groupId, isAssigned) {
+  const div = document.createElement('div');
+  div.className = 'group-card px-4 py-3 rounded-lg font-medium flex items-center gap-2';
+  div.draggable = true;
+  div.dataset.group = groupId;
+  div.style.backgroundColor = getGroupColor(groupId);
+  div.style.opacity = isAssigned ? '0.5' : '1';
+
+  const colorIndicator = document.createElement('span');
+  colorIndicator.className = 'color-indicator';
+  colorIndicator.style.backgroundColor = getGroupColor(groupId);
+
+  const name = document.createElement('span');
+  name.textContent = getGroupDisplayName(groupId);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.textContent = '🗑️';
+  deleteBtn.className = 'ml-auto text-sm hover:scale-110 transition-transform';
+  deleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    deleteGroup(groupId);
+  };
+
+  div.appendChild(colorIndicator);
+  div.appendChild(name);
+  div.appendChild(deleteBtn);
+
+  return div;
+}
+
+function renderCalendar() {
+  const currentTab = document.querySelector('.tab-btn.active')?.dataset.tab || 'by-shift';
+  renderTab(currentTab);
+}
+
+function renderTab(tab) {
+  const container = document.getElementById('calendar-content-auto');
+
+  // Update active tab
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+
+  if (tab === 'by-shift') {
+    container.innerHTML = renderShiftView();
+  } else if (tab === 'by-group') {
+    container.innerHTML = renderGroupView();
+  }
+}
+
+function renderTabManual(tab) {
+  const container = document.getElementById('calendar-content-manual');
+
+  // Update active tab
+  document.querySelectorAll('.tab-btn-manual').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+
+  if (tab === 'by-group') {
+    container.innerHTML = renderGroupViewManual();
+  } else if (tab === 'by-shift') {
+    container.innerHTML = renderShiftViewManual();
+  }
+}
+
+function renderShiftView() {
+  if (!calendar) return '<p class="text-gray-400 text-center py-8">Calcula el calendario primero</p>';
+
+  let html = '<table class="calendar-table"><thead><tr>';
+  html += '<th>Fecha</th><th>Día</th><th>Mañana</th><th>Tarde</th><th>Noche</th>';
+  html += '</tr></thead><tbody>';
+
+  for (let i = 0; i < calendar.day.length; i++) {
+    const dayEntry = calendar.day[i];
+    const afternoonEntry = calendar.afternoon[i];
+    const nightEntry = calendar.night[i];
+
+    const date = new Date(dayEntry.date);
+    const dayName = getDayName(date);
+    const isSunday = dayEntry.isSunday;
+
+    const dayGroups = dayEntry.groups
+      .filter(g => g.isWorking)
+      .map(g => `<span style="color: ${getGroupColor(g.groupId)}">${getGroupDisplayName(g.groupId)}</span>`)
+      .join(', ') || '-';
+
+    const afternoonGroups = afternoonEntry.groups
+      .filter(g => g.isWorking)
+      .map(g => `<span style="color: ${getGroupColor(g.groupId)}">${getGroupDisplayName(g.groupId)}</span>`)
+      .join(', ') || '-';
+
+    const nightGroups = nightEntry.groups
+      .filter(g => g.isWorking)
+      .map(g => `<span style="color: ${getGroupColor(g.groupId)}">${getGroupDisplayName(g.groupId)}</span>`)
+      .join(', ') || '-';
+
+    html += `<tr>`;
+    html += `<td class="${isSunday ? 'sunday' : ''}">${dayEntry.date}</td>`;
+    html += `<td class="${isSunday ? 'sunday' : ''}">${dayName}</td>`;
+    html += `<td>${dayGroups}</td>`;
+    html += `<td>${afternoonGroups}</td>`;
+    html += `<td>${nightGroups}</td>`;
+    html += `</tr>`;
+  }
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderGroupView() {
+  if (!byGroup) return '<p class="text-gray-400 text-center py-8">Calcula el calendario primero</p>';
+
+  // Month selector
+  let html = '<div class="month-selector mb-4">';
+  const months = getMonthsInRange(state.startDate, state.endDate);
+  months.forEach(month => {
+    const isActive = month === state.selectedMonth;
+    html += `<button class="month-btn ${isActive ? 'active' : ''}" onclick="selectMonth('${month}')">${formatMonthName(month)}</button>`;
+  });
+  html += '</div>';
+
+  // Calendar table for selected month
+  html += '<table class="calendar-table"><thead><tr>';
+  html += '<th>Fecha</th><th>Día</th>';
+  state.groups.forEach(groupId => {
+    html += `<th>${getGroupDisplayName(groupId)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  const days = getDaysInMonth(state.selectedMonth);
+
+  days.forEach(day => {
+    const isSunday = day.isSunday;
+    const dayName = getDayName(day.js);
+
+    html += '<tr>';
+    html += `<td class="${isSunday ? 'sunday' : ''}">${day.date}</td>`;
+    html += `<td class="${isSunday ? 'sunday' : ''}">${dayName}</td>`;
+
+    state.groups.forEach(groupId => {
+      const groupData = byGroup[groupId];
+      if (!groupData) {
+        html += '<td>-</td>';
+        return;
+      }
+
+      const entry = groupData.find(e => e.date === day.date);
+      if (!entry) {
+        html += '<td>-</td>';
+        return;
+      }
+
+      const shiftLabel = getShiftLabel(entry.shift);
+      const isWorking = entry.isWorking;
+      const bgColor = isWorking ? getGroupColor(groupId) : 'transparent';
+      const textColor = isWorking ? 'white' : '#6b7280';
+
+      html += `<td class="${isWorking ? 'working' : 'rest'}" style="background-color: ${bgColor}; color: ${textColor};">${shiftLabel}</td>`;
+    });
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderGroupViewManual() {
+  if (!calendar) return '<p class="text-gray-400 text-center py-8">Genera el calendario primero</p>';
+
+  // Month selector
+  let html = '<div class="month-selector mb-4">';
+  const months = getMonthsInRange(state.startDate, state.endDate);
+  months.forEach(month => {
+    const isActive = month === state.selectedMonth;
+    html += `<button class="month-btn ${isActive ? 'active' : ''}" onclick="selectMonth('${month}')">${formatMonthName(month)}</button>`;
+  });
+  html += '</div>';
+
+  // Calendar table
+  html += '<table class="calendar-table"><thead><tr>';
+  html += '<th>Fecha</th><th>Día</th>';
+  state.groups.forEach(groupId => {
+    html += `<th>${getGroupDisplayName(groupId)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  const days = getDaysInMonth(state.selectedMonth);
+
+  days.forEach(day => {
+    const isSunday = day.isSunday;
+    const dayName = getDayName(day.js);
+
+    html += '<tr>';
+    html += `<td class="${isSunday ? 'sunday' : ''}">${day.date}</td>`;
+    html += `<td class="${isSunday ? 'sunday' : ''}">${dayName}</td>`;
+
+    state.groups.forEach(groupId => {
+      const groupDays = state.manualDaysByGroup[groupId] || {};
+      const shift = groupDays[day.date] || 'rest';
+      const shiftLabel = getShiftLabel(shift);
+      const isWorking = shift !== 'rest';
+      const bgColor = isWorking ? getGroupColor(groupId) : 'transparent';
+      const textColor = isWorking ? 'white' : '#6b7280';
+
+      html += `<td class="clickable ${isWorking ? 'working' : 'rest'}"
+                   style="background-color: ${bgColor}; color: ${textColor};"
+                   onclick="toggleDay('${groupId}', '${day.date}')">${shiftLabel}</td>`;
+    });
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderShiftViewManual() {
+  if (!calendar) return '<p class="text-gray-400 text-center py-8">Genera el calendario primero</p>';
+
+  let html = '<table class="calendar-table"><thead><tr>';
+  html += '<th>Fecha</th><th>Día</th><th>Mañana</th><th>Tarde</th><th>Noche</th>';
+  html += '</tr></thead><tbody>';
+
+  const [startY, startM, startD] = state.startDate.split('-').map(Number);
+  const [endY, endM, endD] = state.endDate.split('-').map(Number);
+  const start = new Date(startY, startM - 1, startD);
+  const end = new Date(endY, endM - 1, endD);
+
+  const currentDate = new Date(start);
+  while (currentDate <= end) {
+    const y = currentDate.getFullYear();
+    const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const d = String(currentDate.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    const dayName = getDayName(currentDate);
+    const isSunday = currentDate.getDay() === 0;
+
+    const dayGroups = [];
+    const afternoonGroups = [];
+    const nightGroups = [];
+
+    state.groups.forEach(groupId => {
+      const groupDays = state.manualDaysByGroup[groupId] || {};
+      const shift = groupDays[dateStr];
+      const displayName = getGroupDisplayName(groupId);
+
+      if (shift === 'day') dayGroups.push(displayName);
+      if (shift === 'afternoon') afternoonGroups.push(displayName);
+      if (shift === 'night') nightGroups.push(displayName);
+    });
+
+    html += '<tr>';
+    html += `<td class="${isSunday ? 'sunday' : ''}">${dateStr}</td>`;
+    html += `<td class="${isSunday ? 'sunday' : ''}">${dayName}</td>`;
+    html += `<td>${dayGroups.join(', ') || '-'}</td>`;
+    html += `<td>${afternoonGroups.join(', ') || '-'}</td>`;
+    html += `<td>${nightGroups.join(', ') || '-'}</td>`;
+    html += '</tr>';
+
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  html += '</tbody></table>';
+  return html;
+}
+
+// ==================== DRAG & DROP ====================
+
+let dndWired = false;
+
+function wireDnD() {
+  if (dndWired) return;
+  dndWired = true;
+
+  let draggedGroupId = null;
+
+  document.addEventListener('dragstart', (e) => {
+    const el = e.target.closest('[draggable="true"]');
+    if (!el || !el.dataset.group) return;
+
+    draggedGroupId = el.dataset.group;
+    el.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  document.addEventListener('dragend', (e) => {
+    const el = e.target.closest('[draggable="true"]');
+    if (el) el.classList.remove('dragging');
+    draggedGroupId = null;
+  });
+
+  document.addEventListener('dragover', (e) => {
+    const dropZone = e.target.closest('.drop-zone');
+    if (!dropZone) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dropZone.classList.add('drag-over');
+  });
+
+  document.addEventListener('dragleave', (e) => {
+    const dropZone = e.target.closest('.drop-zone');
+    if (!dropZone) return;
+
+    const rect = dropZone.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX >= rect.right ||
+        e.clientY < rect.top || e.clientY >= rect.bottom) {
+      dropZone.classList.remove('drag-over');
+    }
+  });
+
+  document.addEventListener('drop', (e) => {
+    const dropZone = e.target.closest('.drop-zone');
+    if (!dropZone || !draggedGroupId) return;
+
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+
+    const shift = dropZone.id.replace('drop-zone-', '');
+    addAssignment(shift, draggedGroupId);
+  });
+}
+
+async function addAssignment(shift, groupId) {
+  // Check if already assigned
+  const exists = state.shiftAssignments[shift].find(a => a.groupId === groupId);
+  if (exists) {
+    toast('Grupo ya asignado a este turno', 'warning');
+    return;
+  }
+
+  saveHistory();
+
+  state.shiftAssignments[shift].push({
+    groupId: groupId,
+    cycle1: '4x3',
+    cycle2: null,
+    cycle1Repeat: 1,
+    cycle2Repeat: 1,
+    startOffset: 0
+  });
+
+  await saveState();
+  renderAll();
+}
+
+async function removeAssignment(shift, groupId) {
+  saveHistory();
+
+  state.shiftAssignments[shift] = state.shiftAssignments[shift].filter(
+    a => a.groupId !== groupId
+  );
+
+  await saveState();
+  renderAll();
+}
+
+// ==================== MANUAL MODE HANDLERS ====================
+
+async function toggleDay(groupId, dateStr) {
+  if (!state.selectedShiftType) {
+    toast('Selecciona un tipo de turno primero', 'warning');
+    return;
+  }
+
+  saveHistory();
+
+  if (!state.manualDaysByGroup[groupId]) {
+    state.manualDaysByGroup[groupId] = {};
+  }
+
+  const current = state.manualDaysByGroup[groupId][dateStr] || 'rest';
+
+  if (current === state.selectedShiftType) {
+    // Toggle off
+    state.manualDaysByGroup[groupId][dateStr] = 'rest';
+  } else {
+    // Assign new shift
+    state.manualDaysByGroup[groupId][dateStr] = state.selectedShiftType;
+  }
+
+  await saveState();
+
+  const currentTab = document.querySelector('.tab-btn-manual.active')?.dataset.tab || 'by-group';
+  renderTabManual(currentTab);
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+
+function getGroupDisplayName(groupId) {
+  return state.groupNames[groupId] || `Grupo ${groupId}`;
+}
+
+function getGroupColor(groupId) {
+  const colors = {
+    '1': '#a855f7',   // purple-500
+    '2': '#ec4899',   // pink-500
+    '3': '#3b82f6',   // blue-500
+    '4': '#10b981',   // green-500
+    'A2': '#f59e0b',  // amber-500
+    'B2': '#06b6d4',  // cyan-500
+    'C2': '#f43f5e',  // rose-500
+    'D2': '#14b8a6'   // teal-500
+  };
+  return colors[groupId] || '#6b7280';
+}
+
+function getShiftLabel(shift) {
+  const labels = {
+    'day': 'Mañana',
+    'afternoon': 'Tarde',
+    'night': 'Noche',
+    'rest': 'Descanso'
+  };
+  return labels[shift] || shift;
+}
+
+function getDayName(date) {
+  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  return days[date.getDay()];
+}
+
+function getMonthsInRange(startDate, endDate) {
+  const months = [];
+  const [startY, startM] = startDate.split('-').map(Number);
+  const [endY, endM] = endDate.split('-').map(Number);
+
+  let currentY = startY;
+  let currentM = startM;
+
+  while (currentY < endY || (currentY === endY && currentM <= endM)) {
+    months.push(`${currentY}-${String(currentM).padStart(2, '0')}`);
+    currentM++;
+    if (currentM > 12) {
+      currentM = 1;
+      currentY++;
+    }
+  }
+
+  return months;
+}
+
+function getDaysInMonth(yyyyMM) {
+  const [year, month] = yyyyMM.split('-').map(Number);
+  const count = new Date(year, month, 0).getDate();
+  const days = [];
+
+  for (let d = 1; d <= count; d++) {
+    const dateStr = `${yyyyMM}-${String(d).padStart(2, '0')}`;
+    const date = new Date(year, month - 1, d);
+    days.push({
+      date: dateStr,
+      js: date,
+      isSunday: date.getDay() === 0
+    });
+  }
+
+  return days;
+}
+
+function formatMonthName(yyyyMM) {
+  const [year, month] = yyyyMM.split('-').map(Number);
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  return `${monthNames[month - 1]} ${year}`;
+}
+
+function selectMonth(month) {
+  state.selectedMonth = month;
+  if (state.manualMode) {
+    renderTabManual(document.querySelector('.tab-btn-manual.active')?.dataset.tab || 'by-group');
+  } else {
+    renderTab('by-group');
+  }
+}
+
+function clone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function showLoading() {
+  document.getElementById('loading-overlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+function toast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'slideOut 0.3s ease-out';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ==================== EVENT LISTENERS ====================
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Mode toggle
+  document.getElementById('btn-auto-mode').addEventListener('click', async () => {
+    saveHistory();
+    state.manualMode = false;
+    await saveState();
+    renderAll();
+  });
+
+  document.getElementById('btn-manual-mode').addEventListener('click', async () => {
+    saveHistory();
+    state.manualMode = true;
+    await saveState();
+    renderAll();
+  });
+
+  // Auto mode buttons
+  document.getElementById('btn-save-config').addEventListener('click', async () => {
+    state.startDate = document.getElementById('input-start-date').value;
+    state.endDate = document.getElementById('input-end-date').value;
+    state.maxGroupsPerShift = parseInt(document.getElementById('input-max-groups').value);
+    await saveState();
+  });
+
+  document.getElementById('btn-calculate').addEventListener('click', calculateSchedule);
+  document.getElementById('btn-export-sheet-auto').addEventListener('click', exportToGoogleSheet);
+  document.getElementById('btn-export-xlsx-auto').addEventListener('click', exportToXLSX);
+  document.getElementById('btn-add-group-auto').addEventListener('click', addGroup);
+
+  // Manual mode buttons
+  document.getElementById('btn-save-manual-config').addEventListener('click', async () => {
+    state.startDate = document.getElementById('input-start-date-manual').value;
+    state.endDate = document.getElementById('input-end-date-manual').value;
+    await saveState();
+  });
+
+  document.getElementById('btn-calculate-manual').addEventListener('click', calculateSchedule);
+  document.getElementById('btn-export-sheet-manual').addEventListener('click', exportToGoogleSheet);
+  document.getElementById('btn-export-xlsx-manual').addEventListener('click', exportToXLSX);
+  document.getElementById('btn-clear-calendar').addEventListener('click', clearManualCalendar);
+  document.getElementById('btn-undo-manual').addEventListener('click', undo);
+  document.getElementById('btn-redo-manual').addEventListener('click', redo);
+  document.getElementById('btn-add-group-manual').addEventListener('click', addGroup);
+
+  // Group selection
+  document.getElementById('select-group-manual').addEventListener('change', (e) => {
+    state.selectedGroupId = e.target.value;
+  });
+
+  // Shift type selection
+  document.querySelectorAll('.shift-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedShiftType = btn.dataset.shift;
+      document.querySelectorAll('.shift-type-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+
+  // Calendar tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      renderTab(btn.dataset.tab);
+    });
+  });
+
+  document.querySelectorAll('.tab-btn-manual').forEach(btn => {
+    btn.addEventListener('click', () => {
+      renderTabManual(btn.dataset.tab);
+    });
+  });
+
+  // Initialize drag & drop
+  wireDnD();
+
+  // Load initial state
+  loadState();
+});
+
+</script>
