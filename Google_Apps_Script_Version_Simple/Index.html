@@ -979,6 +979,7 @@
 
     function renderTabManual(tab){
       const wrap=document.getElementById('tabContentManual');
+
       const {calendar, byGroup} = buildManualCalendar();
       const baseMonth = new Date(state.selectedMonth + '-01');
 
@@ -1197,6 +1198,56 @@
       toast(`🧹 Turnos de "${groupName}" limpiados`, 'info');
     }
 
+    // Actualizar celdas del calendario manual SIN re-renderizar toda la vista
+    function updateManualCellsAfterAssignment() {
+      // Reconstruir el calendario con los cambios
+      const {byGroup} = buildManualCalendar();
+
+      // Actualizar solo las celdas que están actualmente en el DOM
+      document.querySelectorAll('.manual-group-cell').forEach(cell => {
+        const dateStr = cell.dataset.date;
+        const groupId = cell.dataset.group;
+
+        // Buscar el día específico en el array del grupo
+        if (byGroup[groupId]) {
+          const dayInfo = byGroup[groupId].find(x => x.date === dateStr);
+
+          if (dayInfo) {
+            // Actualizar las clases de la celda según el turno
+            const shiftClasses = {
+              'day': 'shift-day',
+              'afternoon': 'shift-afternoon',
+              'night': 'shift-night',
+              'rest': 'shift-rest'
+            };
+
+            const shiftLabels = {
+              'day': 'Día',
+              'afternoon': 'Tarde',
+              'night': 'Noche',
+              'rest': 'Descanso'
+            };
+
+            // Remover clases antiguas de turno
+            cell.classList.remove('shift-day', 'shift-afternoon', 'shift-night', 'shift-rest');
+
+            // Agregar la clase del nuevo turno
+            if (shiftClasses[dayInfo.shift]) {
+              cell.classList.add(shiftClasses[dayInfo.shift]);
+            }
+
+            // Actualizar el contenido del div interno
+            const label = shiftLabels[dayInfo.shift] || 'Descanso';
+            const cycleText = dayInfo.currentCycleType === 2 ? '<span class="badge">C2</span>' : '';
+            cell.innerHTML = `<div class="font-semibold text-[11px] py-1">${label}${cycleText}</div>`;
+
+            // Actualizar el atributo title
+            cell.setAttribute('title', label);
+          }
+        }
+      });
+    }
+
     // Conectar clics en la vista por grupos
     function wireGroupViewClicks() {
       // Actualizar labels
@@ -1223,7 +1274,7 @@
 
       // Agregar evento de clic a cada celda
       document.querySelectorAll('.manual-group-cell').forEach(cell => {
-        cell.addEventListener('click', () => {
+        cell.addEventListener('click', (e) => {
           const dateStr = cell.dataset.date;
           const groupId = cell.dataset.group;
 
@@ -1231,8 +1282,9 @@
             // Seleccionar el grupo automáticamente al hacer clic en su celda
             state.selectedGroupId = groupId;
             assignManualDay(dateStr);
-            // Recargar la vista por grupos después de asignar
-            setTimeout(() => renderTabManual('by-group'), 100);
+
+            // Actualizar solo las celdas afectadas SIN re-renderizar toda la vista
+            updateManualCellsAfterAssignment();
           }
         });
       });
@@ -1378,7 +1430,7 @@
       }
 
       saveAuto();
-      renderTabManual('by-group');
+      // No llamar renderTabManual aquí - se llama desde wireGroupViewClicks para preservar scroll
     }
 
     // Limpiar todo el calendario manual
